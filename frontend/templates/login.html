@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Login — MarketPlace{% endblock %}
+{% block content %}
+<h1 style="margin-bottom:16px">Login</h1>
+<div class="form-card" style="max-width:440px">
+  <div id="login-err"></div>
+  <label>Email</label><input id="l-email" type="email" placeholder="you@example.com" autocomplete="email">
+  <label>Password</label><input id="l-pass" type="password" placeholder="Your password" autocomplete="current-password">
+  <button class="btn primary" id="btn-login" style="width:100%;margin-top:12px">Login</button>
+  <p style="margin-top:12px;font-size:14px">No account? <a href="/register/">Create one</a></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function doLogin() {
+  const btn = $("#btn-login");
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = "Logging in…";
+  try {
+    const d = await apiPost("/accounts/login/", {
+      email: $("#l-email").value.trim(),
+      password: $("#l-pass").value,
+    });
+    await refreshAuthNav();
+    location.href = "/";
+  } catch (e) {
+    $("#login-err").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    btn.disabled = false; btn.textContent = "Login";
+  }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  $("#btn-login").addEventListener("click", doLogin);
+  $("#l-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+});
+</script>
+{% endblock %}

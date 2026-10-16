@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Create account — MarketPlace{% endblock %}
+{% block content %}
+<h1 style="margin-bottom:16px">Create account</h1>
+<div class="form-card" style="max-width:440px">
+  <div id="reg-err"></div>
+  <label>Full name *</label><input id="r-name" placeholder="e.g. Himanshu yadav" autocomplete="name">
+  <label>Email *</label><input id="r-email" type="email" placeholder="you@example.com" autocomplete="email">
+  <label>Phone *</label><input id="r-phone" placeholder="10-digit mobile number" autocomplete="tel">
+  <label>Password *</label><input id="r-pass" type="password" placeholder="Min 8 characters" autocomplete="new-password">
+  <button class="btn primary" id="btn-reg" style="width:100%;margin-top:12px">Create account</button>
+  <p style="margin-top:12px;font-size:14px">Already have an account? <a href="/login/">Login</a></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function doRegister() {
+  const btn = $("#btn-reg");
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = "Creating…";
+  try {
+    await apiPost("/accounts/register/", {
+      name: $("#r-name").value.trim(),
+      email: $("#r-email").value.trim(),
+      phone: $("#r-phone").value.trim(),
+      password: $("#r-pass").value,
+    });
+    await refreshAuthNav();
+    location.href = "/";
+  } catch (e) {
+    const errs = e.data && e.data.errors
+      ? Object.values(e.data.errors).join("<br>")
+      : e.message;
+    $("#reg-err").innerHTML = `<div class="alert err">${errs}</div>`;
+    btn.disabled = false; btn.textContent = "Create account";
+  }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  $("#btn-reg").addEventListener("click", doRegister);
+});
+</script>
+{% endblock %}

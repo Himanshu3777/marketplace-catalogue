@@ -114,3 +114,29 @@ document.addEventListener("DOMContentLoaded", () => {
     if (q) location.href = "/search/?q=" + encodeURIComponent(q);
   });
 });
+
+/* Auth: navbar state driven by /api/accounts/me/ (single source of truth) */
+let __currentUser = null;
+async function refreshAuthNav() {
+  const el = $("#auth-nav");
+  if (!el) return;
+  try {
+    const d = await api("/accounts/me/");
+    __currentUser = d.user;
+    if (d.user) {
+      el.innerHTML = `<a href="/my-orders/">Hi, ${esc(d.user.name.split(" ")[0])}</a>
+        <a href="#" id="logout-link">Logout</a>`;
+      $("#logout-link").addEventListener("click", async (e) => {
+        e.preventDefault();
+        await apiPost("/accounts/logout/", {});
+        __currentUser = null;
+        await refreshAuthNav();
+        await refreshCartCount();
+        if (location.pathname === "/my-orders/") location.href = "/";
+      });
+    } else {
+      el.innerHTML = `<a href="/login/">Login</a>`;
+    }
+  } catch (e) { el.innerHTML = `<a href="/login/">Login</a>`; }
+}
+document.addEventListener("DOMContentLoaded", refreshAuthNav);

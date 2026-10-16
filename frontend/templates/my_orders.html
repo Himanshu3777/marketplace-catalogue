@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}My orders — MarketPlace{% endblock %}
+{% block content %}
+<h1 style="margin-bottom:16px">My orders</h1>
+<div id="orders-wrap"><div class="loading">Loading…</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function orderCard(o) {
+  return `<a href="/order/${esc(o.order_number)}/" class="order-card">
+    <div><b>${esc(o.order_number)}</b>
+      <span class="pill">${esc(o.status.replace(/_/g, " "))}</span></div>
+    <div style="font-size:13px;color:#64748b">${o.items.length} item(s) · ${inr(o.total)} · ${esc(o.created_at.slice(0, 10))}</div>
+  </a>`;
+}
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const d = await api("/accounts/orders/");
+    $("#orders-wrap").innerHTML = d.orders.length
+      ? `<div class="order-list">${d.orders.map(orderCard).join("")}</div>`
+      : `<div class="loading">No orders yet.<br><br><a class="btn primary" href="/">Start shopping</a></div>`;
+  } catch (e) {
+    $("#orders-wrap").innerHTML = `<div class="alert err">${e.status === 401 ? `Please <a href="/login/">login</a> to see your orders.` : esc(e.message)}</div>`;
+  }
+});
+</script>
+{% endblock %}
