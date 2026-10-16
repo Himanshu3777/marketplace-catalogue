@@ -30,6 +30,7 @@ from rest_framework.response import Response
 from marketplace.session_auth import SessionAuthNoCSRF
 from marketplace.throttles import CheckoutThrottle
 from orders.models import Order
+from orders.permissions import get_order_for_request
 from orders.serializers import OrderSerializer
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ def create_razorpay_order(request):
     Returns: { razorpay_order_id, amount, currency, key_id }
     """
     order_number = str(request.data.get("order_number", "")).strip()
-    order = get_object_or_404(Order, order_number=order_number)
+    order = get_order_for_request(request, order_number, prefetch_items=False)
 
     if order.payment_status == Order.PAYMENT_PAID:
         return Response({"error": "Order is already paid."},
@@ -130,7 +131,7 @@ def verify_payment(request):
         return Response({"error": "Missing payment details."},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    order = get_object_or_404(Order, order_number=order_number)
+    order = get_order_for_request(request, order_number, prefetch_items=False)
 
     # Idempotent: already verified → return success without re-processing
     if order.payment_verified and order.payment_status == Order.PAYMENT_PAID:

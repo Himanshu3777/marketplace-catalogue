@@ -3,17 +3,24 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
 
+from marketplace.session_auth import SessionAuthNoCSRF
+
 from marketplace.throttles import ReturnsThrottle
 from rest_framework.response import Response
 
 from orders.models import OrderItem
+
+from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import NotFound
+
+from orders.permissions import get_order_for_request
 
 from .models import ReturnRequest
 from .serializers import ReturnRequestSerializer
 
 
 @api_view(["POST"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 def return_request_create(request):
     order_item_id = request.data.get("order_item_id")
@@ -33,6 +40,9 @@ def return_request_create(request):
 
     item = get_object_or_404(
         OrderItem.objects.select_related("order"), pk=order_item_id)
+    # Ownership: can't request a return on someone else's order
+    get_order_for_request(request, item.order.order_number,
+                          prefetch_items=False)
     ok, message = ReturnRequest.check_eligible(item)
     if not ok:
         return Response({"error": message},
@@ -49,11 +59,14 @@ def return_request_create(request):
 
 
 @api_view(["GET"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 def return_request_detail(request, pk):
     rr = get_object_or_404(
         ReturnRequest.objects.select_related("order_item", "order_item__order"),
         pk=pk,
     )
+    # Ownership: return requests inherit their order's access rules
+    get_order_for_request(request, rr.order_item.order.order_number,
+                          prefetch_items=False)
     return Response(ReturnRequestSerializer(rr).data)

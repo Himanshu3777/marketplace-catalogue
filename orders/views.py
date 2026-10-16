@@ -13,6 +13,7 @@ from cart.models import Cart
 from cart.views import cart_payload, get_or_create_cart
 
 from .models import Order, OrderItem
+from .permissions import get_order_for_request
 from .serializers import OrderSerializer
 
 
@@ -181,9 +182,7 @@ def checkout(request):
 @authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 def order_detail(request, order_number):
-    order = get_object_or_404(
-        Order.objects.prefetch_related("items"), order_number=order_number
-    )
+    order = get_order_for_request(request, order_number)
     return Response(OrderSerializer(order).data)
 
 
@@ -196,9 +195,7 @@ def order_cancel(request, order_number):
 
     Releases the reserved stock back to the available pool.
     """
-    order = get_object_or_404(
-        Order.objects.prefetch_related("items"), order_number=order_number
-    )
+    order = get_order_for_request(request, order_number)
     if order.status == Order.STATUS_CANCELLED:
         return Response({"error": "Order is already cancelled"},
                         status=status.HTTP_400_BAD_REQUEST)
