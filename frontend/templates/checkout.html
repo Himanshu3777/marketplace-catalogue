@@ -85,7 +85,13 @@ async function placeOrder() {
     const order = await apiPost("/orders/checkout/", body);
     // New key for any future order from this page (e.g. user goes back).
     window.__idemKey = crypto.randomUUID();
-    location.href = "/order/" + order.order_number + "/";
+    if (payMethod === "UPI") {
+      // Online payment: NEVER trust the frontend — open Razorpay, then
+      // verify the signature on the backend before marking paid.
+      await payWithRazorpay(order);
+    } else {
+      location.href = "/order/" + order.order_number + "/";
+    }
   } catch (e) {
     // 409 = prices changed mid-checkout: show what changed, refresh cart.
     if (e.status === 409 && e.data && e.data.price_changed) {
@@ -99,6 +105,73 @@ async function placeOrder() {
     } else {
       $("#co-err").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
     }
+    btn.disabled = false; btn.textContent = "Place order";
+    window.scrollTo(0, 0);
+  }
+}
+
+/* Razorpay Checkout.js flow (TEST mode). */
+function loadRazorpay() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = resolve; s.onerror = () => reject(new Error("Could not load payment gateway"));
+    document.head.appendChild(s);
+  });
+}
+
+async function payWithRazorpay(order) {
+  const btn = $("#btn-place");
+  try {
+    btn.textContent = "Opening payment…";
+    const pr = await apiPost("/payments/create/", { order_number: order.order_number });
+    await loadRazorpay();
+    const rzp = new Razorpay({
+      key: pr.key_id,
+      amount: pr.amount,
+      currency: pr.currency,
+      name: "MarketPlace",
+      description: "Order " + order.order_number,
+      order_id: pr.razorpay_order_id,
+      prefill: {
+        name: order.customer_name, email: order.email || "",
+        contact: order.phone,
+      },
+      theme: { color: "#4f46e5" },
+      handler: async function (resp) {
+        // Frontend callback is UNTRUSTED — backend verifies the signature.
+        btn.textContent = "Verifying payment…";
+        try {
+          const vr = await apiPost("/payments/verify/", {
+            order_number: order.order_number,
+            razorpay_order_id: resp.razorpay_order_id,
+            razorpay_payment_id: resp.razorpay_payment_id,
+            razorpay_signature: resp.razorpay_signature,
+          });
+          if (vr.verified) location.href = "/order/" + order.order_number + "/";
+        } catch (e) {
+          $("#co-err").innerHTML = `<div class="alert err">Payment verification failed: ${esc(e.message)}<br>Your order ${esc(order.order_number)} is placed — payment is pending. Do not pay again; contact support if money was deducted.</div>`;
+          btn.disabled = false; btn.textContent = "Place order";
+        }
+      },
+      modal: {
+        ondismiss: function () {
+          // User closed without paying — order exists as PENDING, can retry.
+          $("#co-err").innerHTML = `<div class="alert warn">Payment not completed. Your order <b>${esc(order.order_number)}</b> is placed with payment pending — <a href="/order/${esc(order.order_number)}/">view order</a> to retry.</div>`;
+          btn.disabled = false; btn.textContent = "Place order";
+          window.scrollTo(0, 0);
+        },
+      },
+    });
+    rzp.on("payment.failed", function (resp) {
+      $("#co-err").innerHTML = `<div class="alert err">Payment failed: ${esc(resp.error.description || "unknown error")}<br>Your order ${esc(order.order_number)} is placed — you can retry payment from the order page.</div>`;
+      btn.disabled = false; btn.textContent = "Place order";
+      window.scrollTo(0, 0);
+    });
+    rzp.open();
+  } catch (e) {
+    $("#co-err").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
     btn.disabled = false; btn.textContent = "Place order";
     window.scrollTo(0, 0);
   }

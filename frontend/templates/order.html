@@ -38,6 +38,12 @@ function renderOrder(o) {
   const canCancel = o.status === "PLACED" || o.status === "CONFIRMED";
   $("#order-wrap").innerHTML = `
   <div class="alert ok">✅ Order <b>${esc(o.order_number)}</b> placed successfully! ${o.payment_method === "COD" ? "Pay " + inr(o.total) + " on delivery." : ""}</div>
+  ${o.payment_method === "UPI" && o.payment_status === "PENDING" && o.status !== "CANCELLED" ? `
+  <div class="alert warn">⏳ Online payment pending.
+    <button class="btn primary" id="btn-retry-pay" style="margin-left:10px">Pay now</button>
+  </div>` : ""}
+  ${o.payment_status === "PAID" ? `<div class="alert ok">💳 Payment verified ✅</div>` : ""}
+  ${o.payment_status === "FAILED" ? `<div class="alert err">❌ Last payment attempt failed. <button class="btn" id="btn-retry-pay">Retry payment</button></div>` : ""}
   <div class="form-card" style="margin-bottom:16px">
     <h3>Track your order</h3>
     <div class="timeline">
@@ -75,6 +81,48 @@ function renderOrder(o) {
       }
     });
   }
+  // Retry online payment (order exists, payment still pending/failed)
+  const retryBtn = $("#btn-retry-pay");
+  if (retryBtn) {
+    retryBtn.addEventListener("click", async () => {
+      retryBtn.disabled = true; retryBtn.textContent = "Opening payment…";
+      try {
+        const pr = await apiPost("/payments/create/", { order_number: o.order_number });
+        await loadRzp();
+        const rzp = new Razorpay({
+          key: pr.key_id, amount: pr.amount, currency: pr.currency,
+          name: "MarketPlace", description: "Order " + o.order_number,
+          order_id: pr.razorpay_order_id,
+          prefill: { name: o.customer_name, contact: o.phone },
+          theme: { color: "#4f46e5" },
+          handler: async function (resp) {
+            const vr = await apiPost("/payments/verify/", {
+              order_number: o.order_number,
+              razorpay_order_id: resp.razorpay_order_id,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_signature: resp.razorpay_signature,
+            });
+            if (vr.verified) location.reload();
+          },
+        });
+        rzp.on("payment.failed", () => location.reload());
+        rzp.open();
+      } catch (e) {
+        alert(e.message);
+        retryBtn.disabled = false; retryBtn.textContent = "Pay now";
+      }
+    });
+  }
+}
+
+function loadRzp() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = resolve; s.onerror = () => reject(new Error("Could not load payment gateway"));
+    document.head.appendChild(s);
+  });
 }
 
   // Return/replacement modal wiring
