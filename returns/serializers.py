@@ -22,5 +22,9 @@ class ReturnRequestSerializer(serializers.ModelSerializer):
         fields = ["id", "order_number", "product_name", "sku",
                   "request_type", "request_type_label", "reason",
                   "reason_label", "description", "status", "status_label",
+                  "refund_status", "refund_amount", "gateway_refund_id",
+                  "refunded_at",
                   "requested_at", "updated_at"]
-        read_only_fields = ["status", "requested_at", "updated_at"]
+        read_only_fields = ["status", "refund_status", "refund_amount",
+                            "gateway_refund_id", "refunded_at",
+                            "requested_at", "updated_at"]

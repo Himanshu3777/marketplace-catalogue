@@ -63,6 +63,27 @@ class ReturnRequest(models.Model):
         max_length=24, choices=STATUS_CHOICES, default=STATUS_REQUESTED,
         db_index=True,
     )
+    # ---- Actual money movement (tracked SEPARATELY from the request) ----
+    # A return REQUEST is just paperwork. The REFUND is a separate gateway
+    # operation — never confuse the two. refund_status tracks real money.
+    REFUND_NOT_STARTED = "NOT_STARTED"
+    REFUND_INITIATED = "INITIATED"
+    REFUND_PROCESSED = "PROCESSED"
+    REFUND_FAILED = "FAILED"
+    REFUND_STATUS_CHOICES = [
+        (REFUND_NOT_STARTED, "Not started"),
+        (REFUND_INITIATED, "Initiated"),
+        (REFUND_PROCESSED, "Processed"),
+        (REFUND_FAILED, "Failed"),
+    ]
+    refund_status = models.CharField(
+        max_length=16, choices=REFUND_STATUS_CHOICES,
+        default=REFUND_NOT_STARTED, db_index=True,
+    )
+    refund_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True)
+    gateway_refund_id = models.CharField(max_length=64, blank=True)
+    refunded_at = models.DateTimeField(null=True, blank=True)
     requested_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -76,6 +97,62 @@ class ReturnRequest(models.Model):
     @property
     def is_active(self):
         return self.status not in self.TERMINAL_STATUSES
+
+    def initiate_gateway_refund(self):
+        """Initiate the ACTUAL money refund via Razorpay.
+
+        Only for paid orders. Returns (ok, message). This is separate from
+        the return request status — money movement is tracked in
+        refund_status, never inferred from request status.
+        """
+        from django.utils import timezone as tz
+        from orders.models import Order
+        import logging
+        logger = logging.getLogger(__name__)
+
+        order = self.order_item.order
+        if order.payment_status != Order.PAYMENT_PAID:
+            return False, "Order was not paid online — no gateway refund needed."
+        if not order.gateway_payment_id:
+            return False, "No gateway payment recorded for this order."
+        if self.refund_status == self.REFUND_PROCESSED:
+            return False, "Refund already processed."
+        if self.refund_status == self.REFUND_INITIATED:
+            return False, "Refund already initiated — check gateway dashboard."
+
+        from django.conf import settings
+        key_id = getattr(settings, "RAZORPAY_KEY_ID", "")
+        key_secret = getattr(settings, "RAZORPAY_KEY_SECRET", "")
+        if not key_id or not key_secret:
+            return False, "Payment gateway not configured."
+
+        import razorpay
+        client = razorpay.Client(auth=(key_id, key_secret))
+        # Refund the single item's price (not the whole order)
+        amount_paise = int(round(float(self.order_item.price)
+                                 * self.order_item.quantity * 100))
+        try:
+            refund = client.payment.refund(
+                order.gateway_payment_id,
+                {"amount": amount_paise,
+                 "notes": {"return_request": str(self.id)}})
+        except Exception as e:
+            logger.exception("Razorpay refund failed for return #%s", self.id)
+            self.refund_status = self.REFUND_FAILED
+            self.save(update_fields=["refund_status"])
+            return False, f"Gateway refund failed: {e}"
+
+        self.gateway_refund_id = refund.get("id", "")
+        self.refund_amount = self.order_item.price * self.order_item.quantity
+        self.refund_status = self.REFUND_PROCESSED
+        self.refunded_at = tz.now()
+        self.status = self.STATUS_REFUNDED
+        self.save()
+        # Also reflect on the order
+        if order.payment_status == Order.PAYMENT_PAID:
+            order.payment_status = Order.PAYMENT_REFUNDED
+            order.save(update_fields=["payment_status"])
+        return True, f"Refund processed: {self.gateway_refund_id}"
 
     @staticmethod
     def check_eligible(order_item):
