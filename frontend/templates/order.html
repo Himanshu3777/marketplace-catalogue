@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Order — MarketPlace{% endblock %}
+{% block content %}
+<div id="order-wrap"><div class="loading">Loading order…</div></div>
+<div id="modal-root"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const orderNumber = location.pathname.split("/").filter(Boolean).pop();
+
+const REASONS = [
+  ["DAMAGED_IN_TRANSIT", "Damaged in transit"],
+  ["DEFECTIVE", "Defective / not working"],
+  ["WRONG_ITEM", "Wrong item delivered"],
+  ["SIZE_FIT_ISSUE", "Size / fit issue"],
+  ["QUALITY_NOT_AS_EXPECTED", "Quality not as expected"],
+  ["OTHER", "Other"],
+];
+
+function itemRow(it, canReturn) {
+  return `<div class="cart-row" data-item-id="${it.id}">
+    <div style="width:90px;height:90px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:28px">📦</div>
+    <div>
+      <b>${esc(it.product_name)}</b>
+      ${it.variant_name ? `<div style="font-size:13px;color:#64748b">${esc(it.variant_name)}</div>` : ""}
+      <div style="font-size:13px;color:#64748b">SKU ${esc(it.sku)} · Qty ${it.quantity}</div>
+      ${canReturn ? `<div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn" data-rr="RETURN" data-id="${it.id}" style="padding:8px 14px;font-size:13px;border:1px solid #e2e8f0;background:#fff">↩️ Return</button>
+        <button class="btn" data-rr="REPLACEMENT" data-id="${it.id}" style="padding:8px 14px;font-size:13px;border:1px solid #e2e8f0;background:#fff">🔄 Replace</button>
+      </div>` : ""}
+    </div>
+    <div style="text-align:right"><b>${inr(it.line_total)}</b></div>
+  </div>`;
+}
+
+function renderOrder(o) {
+  const canReturn = o.status === "DELIVERED";
+  $("#order-wrap").innerHTML = `
+  <div class="alert ok">✅ Order <b>${esc(o.order_number)}</b> placed successfully! ${o.payment_method === "COD" ? "Pay " + inr(o.total) + " on delivery." : ""}</div>
+  <div class="form-card" style="margin-bottom:16px">
+    <h3>Track your order</h3>
+    <div class="timeline">
+      ${o.timeline.map(t => `<div class="tstep ${t.done ? "done" : ""} ${t.current ? "current" : ""}">${t.done ? "✓ " : ""}${esc(t.label)}</div>`).join("")}
+    </div>
+    ${o.status === "CANCELLED" ? `<div class="alert err">This order was cancelled.</div>` : ""}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:14px;margin-top:8px">
+      <div><b>Deliver to</b><br>${esc(o.customer_name)} · ${esc(o.phone)}<br>
+        ${esc(o.address_line1)}${o.address_line2 ? ", " + esc(o.address_line2) : ""}<br>
+        ${esc(o.city)}, ${esc(o.state)} — ${esc(o.pincode)}</div>
+      <div><b>Payment</b><br>${o.payment_method === "COD" ? "💵 Cash on Delivery" : "📱 UPI"}<br>
+        <span style="color:#64748b">Subtotal ${inr(o.subtotal)} · Delivery ${o.delivery_fee > 0 ? inr(o.delivery_fee) : "FREE"}<br>
+        <b>Total ${inr(o.total)}</b></span></div>
+    </div>
+  </div>
+  <h3 style="margin:16px 0 10px">Items (${o.items.length})</h3>
+  ${o.items.map(it => itemRow(it, canReturn)).join("")}
+  ${canReturn ? `<div class="alert ok">↩️ 7-day return window: damaged, defective or wrong items can be returned or replaced.</div>` : ""}
+  <div style="margin-top:16px"><a class="btn dark" href="/">Continue shopping</a></div>`;
+
+  // Return/replacement modal wiring
+  $$("#order-wrap button[data-rr]").forEach(b => b.addEventListener("click", () => openReturnModal(b.dataset.id, b.dataset.rr)));
+}
+
+function openReturnModal(itemId, type) {
+  const title = type === "RETURN" ? "Request a return" : "Request a replacement";
+  $("#modal-root").innerHTML = `<div class="modal-back" id="mback">
+    <div class="modal">
+      <h3>${title}</h3>
+      <div id="m-err"></div>
+      <label style="display:block;font-size:13px;font-weight:600;margin:8px 0 4px">Reason *</label>
+      <select id="m-reason" style="width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:8px">
+        ${REASONS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}
+      </select>
+      <label style="display:block;font-size:13px;font-weight:600;margin:8px 0 4px">Describe the issue (optional)</label>
+      <textarea id="m-desc" rows="3" style="width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:8px" placeholder="e.g. Box arrived crushed, item cracked…"></textarea>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn primary" id="m-submit" style="flex:1">Submit request</button>
+        <button class="btn" id="m-cancel" style="border:1px solid #e2e8f0;background:#fff">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  $("#m-cancel").addEventListener("click", () => $("#modal-root").innerHTML = "");
+  $("#mback").addEventListener("click", (e) => { if (e.target.id === "mback") $("#modal-root").innerHTML = ""; });
+  $("#m-submit").addEventListener("click", async () => {
+    const btn = $("#m-submit");
+    btn.disabled = true; btn.textContent = "Submitting…";
+    try {
+      const rr = await apiPost("/returns/request/", {
+        order_item_id: Number(itemId),
+        request_type: type,
+        reason: $("#m-reason").value,
+        description: $("#m-desc").value.trim(),
+      });
+      $("#modal-root").innerHTML = "";
+      alert(`${type === "RETURN" ? "Return" : "Replacement"} request #${rr.id} submitted — status: ${rr.status_label}. We'll contact you for pickup.`);
+    } catch (e) {
+      $("#m-err").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+      btn.disabled = false; btn.textContent = "Submit request";
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const o = await api("/orders/" + encodeURIComponent(orderNumber) + "/");
+    document.title = "Order " + o.order_number + " — MarketPlace";
+    renderOrder(o);
+  } catch (e) {
+    $("#order-wrap").innerHTML = `<div class="alert err">Order not found. Check the order number.</div>`;
+  }
+});
+</script>
+{% endblock %}

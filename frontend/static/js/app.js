@@ -9,6 +9,39 @@ async function api(path) {
   return r.json();
 }
 
+async function apiPost(path, body) {
+  const r = await fetch(API + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `API ${r.status}`);
+  return d;
+}
+
+/* Cart: badge count + add helper shared by product/listing pages */
+async function refreshCartCount() {
+  try {
+    const d = await api("/cart/");
+    const el = $("#cart-count");
+    if (el) { el.textContent = d.item_count; el.style.display = d.item_count ? "" : "none"; }
+  } catch (e) { /* cart unavailable — ignore */ }
+}
+
+async function addToCart(variantId, qty) {
+  const d = await apiPost("/cart/add/", { variant_id: variantId, quantity: qty || 1 });
+  await refreshCartCount();
+  return d;
+}
+
+async function quickAddBySlug(slug) {
+  const p = await api(`/products/${slug}/`);
+  const v = (p.variants || []).find((x) => x.is_active) || p.variants[0];
+  if (!v) throw new Error("No variant available");
+  return addToCart(v.id, 1);
+}
+
 const inr = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 function stars(r) {
@@ -27,6 +60,7 @@ function productCard(p) {
       <div><span class="price">${inr(p.final_price)}</span>
         ${p.discount_pct > 0 ? `<span class="mrp">${inr(p.price)}</span>${off}` : ""}</div>
       <div class="rating">${stars(p.rating)} ${p.rating} (${p.review_count})</div>
+      <button class="btn primary btn-quick-add" data-slug="${p.slug}">Add to cart</button>
     </div>
   </div>`;
 }
@@ -55,6 +89,19 @@ function bindPager(container, onGo) {
 
 // Header search wiring (present on every page)
 document.addEventListener("DOMContentLoaded", () => {
+  refreshCartCount();
+  // Quick-add buttons on product cards (delegated — cards render dynamically)
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".btn-quick-add");
+    if (!btn) return;
+    e.preventDefault();
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const orig = btn.textContent;
+    try { await quickAddBySlug(btn.dataset.slug); btn.textContent = "✓ Added!"; }
+    catch (err) { alert(err.message); btn.textContent = orig; }
+    setTimeout(() => { btn.disabled = false; btn.textContent = "Add to cart"; }, 1200);
+  });
   const form = $("#search-form");
   if (form) form.addEventListener("submit", (e) => {
     e.preventDefault();
