@@ -119,6 +119,32 @@ class Order(models.Model):
     def __str__(self):
         return self.order_number
 
+    def release_reserved_stock(self):
+        """Return reserved units to available pool (order cancelled)."""
+        from django.db import transaction
+        with transaction.atomic():
+            for item in self.items.select_related("variant").all():
+                if not item.variant_id:
+                    continue
+                inv = getattr(item.variant, "inventory", None)
+                if inv and inv.reserved >= item.quantity:
+                    inv.reserved -= item.quantity
+                    inv.save(update_fields=["reserved"])
+
+    def deduct_stock_on_delivery(self):
+        """Convert reservation into a real sale (order delivered)."""
+        from django.db import transaction
+        with transaction.atomic():
+            for item in self.items.select_related("variant").all():
+                if not item.variant_id:
+                    continue
+                inv = getattr(item.variant, "inventory", None)
+                if inv:
+                    take = min(item.quantity, inv.reserved)
+                    inv.reserved -= take
+                    inv.quantity = max(0, inv.quantity - item.quantity)
+                    inv.save(update_fields=["reserved", "quantity"])
+
     @staticmethod
     def generate_order_number():
         """Unique MC-XXXXXX number (6 chars, unambiguous alphabet)."""

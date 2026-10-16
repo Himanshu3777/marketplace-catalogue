@@ -182,3 +182,29 @@ def order_detail(request, order_number):
         Order.objects.prefetch_related("items"), order_number=order_number
     )
     return Response(OrderSerializer(order).data)
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([])
+@throttle_classes([CheckoutThrottle])
+def order_cancel(request, order_number):
+    """Customer cancels their own order (PLACED/CONFIRMED only).
+
+    Releases the reserved stock back to the available pool.
+    """
+    order = get_object_or_404(
+        Order.objects.prefetch_related("items"), order_number=order_number
+    )
+    if order.status == Order.STATUS_CANCELLED:
+        return Response({"error": "Order is already cancelled"},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if order.status not in (Order.STATUS_PLACED, Order.STATUS_CONFIRMED):
+        return Response(
+            {"error": f"Cannot cancel — order is already {order.status.lower()}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    order.status = Order.STATUS_CANCELLED
+    order.save(update_fields=["status"])
+    order.release_reserved_stock()
+    return Response(OrderSerializer(order).data)

@@ -35,6 +35,7 @@ function itemRow(it, canReturn) {
 
 function renderOrder(o) {
   const canReturn = o.status === "DELIVERED";
+  const canCancel = o.status === "PLACED" || o.status === "CONFIRMED";
   $("#order-wrap").innerHTML = `
   <div class="alert ok">✅ Order <b>${esc(o.order_number)}</b> placed successfully! ${o.payment_method === "COD" ? "Pay " + inr(o.total) + " on delivery." : ""}</div>
   <div class="form-card" style="margin-bottom:16px">
@@ -55,7 +56,26 @@ function renderOrder(o) {
   <h3 style="margin:16px 0 10px">Items (${o.items.length})</h3>
   ${o.items.map(it => itemRow(it, canReturn)).join("")}
   ${canReturn ? `<div class="alert ok">↩️ 7-day return window: damaged, defective or wrong items can be returned or replaced.</div>` : ""}
-  <div style="margin-top:16px"><a class="btn dark" href="/">Continue shopping</a></div>`;
+  <div style="margin-top:16px;display:flex;gap:10px">
+    <a class="btn dark" href="/">Continue shopping</a>
+    ${canCancel ? `<button class="btn" id="btn-cancel-order" style="border:1px solid #fecaca;background:#fff;color:#dc2626">Cancel order</button>` : ""}
+  </div>`;
+  if (canCancel) {
+    $("#btn-cancel-order").addEventListener("click", async () => {
+      if (!confirm("Cancel this order? Reserved stock will be released.")) return;
+      const btn = $("#btn-cancel-order");
+      btn.disabled = true; btn.textContent = "Cancelling…";
+      try {
+        const updated = await apiPost(`/orders/${o.order_number}/cancel/`, {});
+        renderOrder(updated);
+        window.scrollTo(0, 0);
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false; btn.textContent = "Cancel order";
+      }
+    });
+  }
+}
 
   // Return/replacement modal wiring
   $$("#order-wrap button[data-rr]").forEach(b => b.addEventListener("click", () => openReturnModal(b.dataset.id, b.dataset.rr)));

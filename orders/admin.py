@@ -37,16 +37,21 @@ class OrderAdmin(admin.ModelAdmin):
     def mark_delivered(self, request, queryset):
         # COD orders are collected on delivery — auto-mark paid+verified.
         # Online payments must ONLY be marked paid via gateway webhook.
-        for order in queryset:
+        for order in queryset.prefetch_related("items"):
             order.status = Order.STATUS_DELIVERED
             if order.payment_method == Order.PAYMENT_COD:
                 order.payment_status = Order.PAYMENT_PAID
                 order.payment_verified = True
             order.save()
+            order.deduct_stock_on_delivery()
 
     @admin.action(description="Mark selected as CANCELLED")
     def mark_cancelled(self, request, queryset):
-        queryset.update(status=Order.STATUS_CANCELLED)
+        for order in queryset.prefetch_related("items"):
+            if order.status != Order.STATUS_CANCELLED:
+                order.status = Order.STATUS_CANCELLED
+                order.save()
+                order.release_reserved_stock()
 
 
 @admin.register(OrderItem)
