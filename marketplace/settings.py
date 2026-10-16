@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'django_filters',
     # local
+    'accounts',
     'catalog',
     'inventory',
     'sellers',
@@ -64,6 +65,7 @@ REST_FRAMEWORK = {
         'checkout': '10/min',    # order placement attempts
         'cart_write': '60/min',   # cart add/update/remove
         'returns': '10/min',     # return/replacement requests
+        'auth': '20/min',        # login/register attempts (brute-force guard)
     },
 }
 

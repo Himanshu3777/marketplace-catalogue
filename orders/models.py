@@ -99,6 +99,13 @@ class Order(models.Model):
     total = models.DecimalField(max_digits=12, decimal_places=2)
 
     session_key = models.CharField(max_length=64, blank=True, db_index=True)
+    # Customer who placed the order (null = guest checkout).
+    # Required before payment-gateway integration: every paid order must
+    # be traceable to a verified account.
+    user = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="orders", db_index=True,
+    )
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

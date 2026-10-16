@@ -21,11 +21,15 @@ from django.views.generic import TemplateView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('catalog.urls')),
+    path('api/', include('accounts.urls')),
     path('api/', include('cart.urls')),
     path('api/', include('orders.urls')),
     path('api/', include('returns.urls')),
     # Storefront (vanilla JS, consumes the API above)
     path('', TemplateView.as_view(template_name='index.html'), name='home'),
+    path('login/', TemplateView.as_view(template_name='login.html'), name='login'),
+    path('register/', TemplateView.as_view(template_name='register.html'), name='register'),
+    path('my-orders/', TemplateView.as_view(template_name='my_orders.html'), name='my-orders'),
     path('cart/', TemplateView.as_view(template_name='cart.html'), name='cart'),
     path('checkout/', TemplateView.as_view(template_name='checkout.html'), name='checkout'),
     path('order/<str:order_number>/', TemplateView.as_view(template_name='order.html'), name='order-confirmation'),

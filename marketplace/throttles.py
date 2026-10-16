@@ -16,3 +16,7 @@ class CartWriteThrottle(AnonRateThrottle):
 
 class ReturnsThrottle(AnonRateThrottle):
     scope = "returns"
+
+
+class AuthThrottle(AnonRateThrottle):
+    scope = "auth"

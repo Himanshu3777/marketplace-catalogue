@@ -4,6 +4,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
 
+from marketplace.session_auth import SessionAuthNoCSRF
+
 from marketplace.throttles import CheckoutThrottle
 from rest_framework.response import Response
 
@@ -24,7 +26,7 @@ REQUIRED_FIELDS = ["customer_name", "phone", "address_line1", "city",
 
 
 @api_view(["POST"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 @throttle_classes([CheckoutThrottle])
 def checkout(request):
@@ -128,6 +130,7 @@ def checkout(request):
             order = Order.objects.create(
                 order_number=Order.generate_order_number(),
                 idempotency_key=idempotency_key,
+                user=request.user if request.user.is_authenticated else None,
                 customer_name=data["customer_name"].strip(),
                 phone=phone_digits,
                 email=str(data.get("email", "")).strip(),
@@ -175,7 +178,7 @@ def checkout(request):
 
 
 @api_view(["GET"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 def order_detail(request, order_number):
     order = get_object_or_404(
@@ -185,7 +188,7 @@ def order_detail(request, order_number):
 
 
 @api_view(["POST"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 @throttle_classes([CheckoutThrottle])
 def order_cancel(request, order_number):

@@ -3,6 +3,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
 
+from marketplace.session_auth import SessionAuthNoCSRF
+
 from marketplace.throttles import CartWriteThrottle
 from rest_framework.response import Response
 
@@ -13,7 +15,16 @@ from .serializers import CartItemSerializer
 
 
 def get_or_create_cart(request):
-    """Return the session's cart, creating the session + cart if needed."""
+    """Return the session's cart, creating the session + cart if needed.
+
+    Logged-in users get their persistent user cart (survives sessions);
+    guests get the session-keyed cart (merged into the user cart on login).
+    """
+    if request.user.is_authenticated:
+        cart, _ = Cart.objects.get_or_create(
+            user=request.user,
+            defaults={"session_key": f"user-{request.user.id}"})
+        return cart
     if not request.session.session_key:
         request.session.save()
     cart, _ = Cart.objects.get_or_create(session_key=request.session.session_key)
@@ -43,7 +54,7 @@ def available_stock(variant):
 
 
 @api_view(["GET"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 def cart_detail(request):
     cart = get_or_create_cart(request)
@@ -51,7 +62,7 @@ def cart_detail(request):
 
 
 @api_view(["POST"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 @throttle_classes([CartWriteThrottle])
 def cart_add(request):
@@ -101,7 +112,7 @@ def cart_add(request):
 
 
 @api_view(["POST"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 @throttle_classes([CartWriteThrottle])
 def cart_update(request):
@@ -131,7 +142,7 @@ def cart_update(request):
 
 
 @api_view(["POST"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 @throttle_classes([CartWriteThrottle])
 def cart_remove(request):
@@ -143,7 +154,7 @@ def cart_remove(request):
 
 
 @api_view(["POST"])
-@authentication_classes([])
+@authentication_classes([SessionAuthNoCSRF])
 @permission_classes([])
 @throttle_classes([CartWriteThrottle])
 def cart_clear(request):

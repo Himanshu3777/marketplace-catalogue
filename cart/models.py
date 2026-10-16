@@ -4,6 +4,12 @@ from django.db import models
 
 class Cart(models.Model):
     session_key = models.CharField(max_length=64, unique=True, db_index=True)
+    # Logged-in owner's cart. One cart per user; anonymous carts use
+    # session_key only. Merged on login (see accounts.views).
+    user = models.OneToOneField(
+        "auth.User", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="cart",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
