@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django_filters',
     # local
     'accounts',
+    'payments',
     'catalog',
     'inventory',
     'sellers',
@@ -179,3 +180,8 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+# Razorpay (TEST mode — no KYC needed). Set in Render dashboard env vars.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
