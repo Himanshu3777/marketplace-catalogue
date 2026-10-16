@@ -1,7 +1,9 @@
 """Session cart API. JSON only — no auth, cart is keyed by session."""
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+
+from marketplace.throttles import CartWriteThrottle
 from rest_framework.response import Response
 
 from catalog.models import ProductVariant
@@ -51,6 +53,7 @@ def cart_detail(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([])
+@throttle_classes([CartWriteThrottle])
 def cart_add(request):
     variant_id = request.data.get("variant_id")
     try:
@@ -83,10 +86,14 @@ def cart_add(request):
         )
     if item is None:
         item = CartItem.objects.create(
-            cart=cart, variant=variant, quantity=quantity)
+            cart=cart, variant=variant, quantity=quantity,
+            price_at_add=variant.final_price)
         created = True
     else:
         item.quantity = new_qty
+        # Keep the ORIGINAL price snapshot — checkout compares it against
+        # the current price and blocks on drift (409) instead of silently
+        # charging more.
         item.save()
         created = False
     return Response(cart_payload(cart), status=status.HTTP_201_CREATED
@@ -96,6 +103,7 @@ def cart_add(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([])
+@throttle_classes([CartWriteThrottle])
 def cart_update(request):
     item_id = request.data.get("item_id")
     try:
@@ -125,6 +133,7 @@ def cart_update(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([])
+@throttle_classes([CartWriteThrottle])
 def cart_remove(request):
     item_id = request.data.get("item_id")
     cart = get_or_create_cart(request)
@@ -136,6 +145,7 @@ def cart_remove(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([])
+@throttle_classes([CartWriteThrottle])
 def cart_clear(request):
     cart = get_or_create_cart(request)
     cart.items.all().delete()

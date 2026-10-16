@@ -58,6 +58,13 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'catalog.pagination.StandardPagination',
     'PAGE_SIZE': 20,
+    # Abuse protection: money-moving endpoints are throttled per IP.
+    # AnonRateThrottle keys on IP for unauthenticated requests.
+    'DEFAULT_THROTTLE_RATES': {
+        'checkout': '10/min',    # order placement attempts
+        'cart_write': '60/min',   # cart add/update/remove
+        'returns': '10/min',     # return/replacement requests
+    },
 }
 
 MIDDLEWARE = [

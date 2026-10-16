@@ -28,6 +28,14 @@ class CartItem(models.Model):
         related_name="cart_items",
     )
     quantity = models.PositiveIntegerField(default=1)
+    # Price snapshot at the moment the item was added to the cart.
+    # At checkout we compare this against the CURRENT price — if the
+    # price changed meanwhile, checkout is blocked with 409 so the
+    # customer reviews the new total (never silently overcharged).
+    # default=0 is only for the initial migration (existing rows were
+    # ephemeral session carts); always set explicitly on create.
+    price_at_add = models.DecimalField(max_digits=12, decimal_places=2,
+                                       default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

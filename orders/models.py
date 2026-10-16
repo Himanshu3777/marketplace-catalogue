@@ -1,6 +1,7 @@
 """Guest checkout orders. Customer details are captured per order (no accounts)."""
 import random
 import string
+import uuid
 
 from django.db import models
 from django.utils import timezone
@@ -58,6 +59,40 @@ class Order(models.Model):
         max_length=8, choices=PAYMENT_CHOICES, default=PAYMENT_COD
     )
     notes = models.TextField(blank=True)
+
+    # ---- Payment verification (backend is the ONLY source of truth) ----
+    # The frontend must NEVER mark an order paid. Only a verified
+    # gateway webhook/signature check may flip payment_status to PAID.
+    PAYMENT_PENDING = "PENDING"
+    PAYMENT_PAID = "PAID"
+    PAYMENT_FAILED = "FAILED"
+    PAYMENT_REFUNDED = "REFUNDED"
+    PAYMENT_STATUS_CHOICES = [
+        (PAYMENT_PENDING, "Pending"),
+        (PAYMENT_PAID, "Paid"),
+        (PAYMENT_FAILED, "Failed"),
+        (PAYMENT_REFUNDED, "Refunded"),
+    ]
+    payment_status = models.CharField(
+        max_length=10, choices=PAYMENT_STATUS_CHOICES,
+        default=PAYMENT_PENDING, db_index=True,
+    )
+    # Gateway references (Razorpay) — set only after backend verification.
+    gateway_order_id = models.CharField(max_length=64, blank=True, db_index=True)
+    gateway_payment_id = models.CharField(max_length=64, blank=True)
+    gateway_signature = models.CharField(max_length=128, blank=True)
+    payment_verified = models.BooleanField(default=False)
+    payment_verified_at = models.DateTimeField(null=True, blank=True)
+
+    # ---- Idempotency: refresh/double-click must never create 2 orders ----
+    # The checkout page generates one UUID per page load and sends it with
+    # the request. A repeated request with the same key returns the
+    # ORIGINAL order instead of creating a duplicate.
+    # NOTE: default=uuid4 is migration-only (for pre-existing rows);
+    # the view ALWAYS supplies an explicit key.
+    idempotency_key = models.CharField(
+        max_length=36, unique=True, db_index=True, default=uuid.uuid4,
+    )
 
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
     delivery_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)

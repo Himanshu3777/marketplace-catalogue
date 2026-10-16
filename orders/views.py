@@ -1,12 +1,14 @@
 """Guest checkout + order tracking API. JSON only."""
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+
+from marketplace.throttles import CheckoutThrottle
 from rest_framework.response import Response
 
 from cart.models import Cart
-from cart.views import get_or_create_cart
+from cart.views import cart_payload, get_or_create_cart
 
 from .models import Order, OrderItem
 from .serializers import OrderSerializer
@@ -24,6 +26,7 @@ REQUIRED_FIELDS = ["customer_name", "phone", "address_line1", "city",
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([])
+@throttle_classes([CheckoutThrottle])
 def checkout(request):
     data = request.data
     missing = [f for f in REQUIRED_FIELDS if not str(data.get(f, "")).strip()]
@@ -37,6 +40,37 @@ def checkout(request):
         return Response({"error": "payment_method must be COD or UPI"},
                         status=status.HTTP_400_BAD_REQUEST)
 
+    # ---- Input validation: Indian phone (10 digits) + pincode (6) ----
+    phone_digits = "".join(c for c in str(data["phone"]) if c.isdigit())
+    # Accept +91 prefix
+    if phone_digits.startswith("91") and len(phone_digits) == 12:
+        phone_digits = phone_digits[2:]
+    if len(phone_digits) != 10 or not phone_digits[0] in "6789":
+        return Response(
+            {"error": "Enter a valid 10-digit mobile number"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    pincode_digits = "".join(c for c in str(data["pincode"]) if c.isdigit())
+    if len(pincode_digits) != 6:
+        return Response(
+            {"error": "Enter a valid 6-digit pincode"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ---- Idempotency: same key => return the ORIGINAL order, never a 2nd one
+    idempotency_key = str(data.get("idempotency_key", "")).strip()
+    if not idempotency_key:
+        return Response(
+            {"error": "idempotency_key is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    existing = Order.objects.filter(
+        idempotency_key=idempotency_key).prefetch_related("items").first()
+    if existing:
+        payload = OrderSerializer(existing).data
+        payload["duplicate"] = True
+        return Response(payload, status=status.HTTP_200_OK)
+
     cart = get_or_create_cart(request)
     items = list(
         cart.items.select_related("variant", "variant__product",
@@ -47,7 +81,7 @@ def checkout(request):
         return Response({"error": "Your cart is empty"},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    # Validate stock before charging ahead
+    # ---- Stock re-check (variant-level, right before money moves) ----
     for item in items:
         stock = available_stock(item.variant)
         if item.quantity > stock:
@@ -58,27 +92,65 @@ def checkout(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+    # ---- Price-change detection: never silently charge a new price ----
+    # NOTE: compare as rounded floats — variant.final_price returns float
+    # while price_at_add is Decimal; direct != is always True (float noise).
+    changed = []
+    for item in items:
+        current = round(float(item.variant.final_price), 2)
+        snapshot = round(float(item.price_at_add), 2)
+        if snapshot != current:
+            changed.append({
+                "variant_id": item.variant.id,
+                "product_name": item.variant.product.name,
+                "old_price": snapshot,
+                "new_price": current,
+            })
+    if changed:
+        # Refresh the snapshots so the next attempt uses fresh prices
+        for item, c in zip(items, changed):
+            item.price_at_add = item.variant.final_price
+            item.save(update_fields=["price_at_add"])
+        return Response(
+            {"error": "Prices changed while you were checking out. "
+                      "Please review the updated total.",
+             "price_changed": True,
+             "changes": changed,
+             "cart": cart_payload(cart)},
+            status=status.HTTP_409_CONFLICT,
+        )
+
     with transaction.atomic():
         subtotal = round(sum(item.variant.final_price * item.quantity
                              for item in items), 2)
         delivery_fee = Order.delivery_fee_for(subtotal)
-        order = Order.objects.create(
-            order_number=Order.generate_order_number(),
-            customer_name=data["customer_name"].strip(),
-            phone=str(data["phone"]).strip(),
-            email=str(data.get("email", "")).strip(),
-            address_line1=data["address_line1"].strip(),
-            address_line2=str(data.get("address_line2", "")).strip(),
-            city=data["city"].strip(),
-            state=data["state"].strip(),
-            pincode=str(data["pincode"]).strip(),
-            payment_method=payment_method,
-            notes=str(data.get("notes", "")).strip(),
-            subtotal=subtotal,
-            delivery_fee=delivery_fee,
-            total=round(subtotal + delivery_fee, 2),
-            session_key=request.session.session_key or "",
-        )
+        try:
+            order = Order.objects.create(
+                order_number=Order.generate_order_number(),
+                idempotency_key=idempotency_key,
+                customer_name=data["customer_name"].strip(),
+                phone=phone_digits,
+                email=str(data.get("email", "")).strip(),
+                address_line1=data["address_line1"].strip(),
+                address_line2=str(data.get("address_line2", "")).strip(),
+                city=data["city"].strip(),
+                state=data["state"].strip(),
+                pincode=pincode_digits,
+                payment_method=payment_method,
+                notes=str(data.get("notes", "")).strip(),
+                subtotal=subtotal,
+                delivery_fee=delivery_fee,
+                total=round(subtotal + delivery_fee, 2),
+                session_key=request.session.session_key or "",
+            )
+        except IntegrityError:
+            # Race: same key submitted twice concurrently — return original
+            existing = Order.objects.filter(
+                idempotency_key=idempotency_key
+            ).prefetch_related("items").first()
+            payload = OrderSerializer(existing).data
+            payload["duplicate"] = True
+            return Response(payload, status=status.HTTP_200_OK)
         for item in items:
             v = item.variant
             axes = "/".join(a for a in [v.color, v.size, v.storage] if a)

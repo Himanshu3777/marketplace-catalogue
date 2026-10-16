@@ -12,12 +12,41 @@ class OrderItemInline(admin.TabularInline):
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = ["order_number", "customer_name", "phone", "status",
-                    "payment_method", "total", "created_at"]
-    list_filter = ["status", "payment_method", "created_at"]
-    search_fields = ["order_number", "customer_name", "phone"]
-    readonly_fields = ["order_number", "subtotal", "delivery_fee", "total",
-                       "created_at", "updated_at"]
+                    "payment_method", "payment_status", "payment_verified",
+                    "total", "created_at"]
+    list_filter = ["status", "payment_method", "payment_status",
+                   "payment_verified", "created_at"]
+    search_fields = ["order_number", "customer_name", "phone",
+                     "gateway_order_id", "gateway_payment_id"]
+    readonly_fields = ["order_number", "idempotency_key", "subtotal",
+                       "delivery_fee", "total", "payment_verified",
+                       "payment_verified_at", "created_at", "updated_at"]
     inlines = [OrderItemInline]
+    actions = ["mark_confirmed", "mark_shipped", "mark_delivered",
+               "mark_cancelled"]
+
+    @admin.action(description="Mark selected as CONFIRMED")
+    def mark_confirmed(self, request, queryset):
+        queryset.update(status=Order.STATUS_CONFIRMED)
+
+    @admin.action(description="Mark selected as SHIPPED")
+    def mark_shipped(self, request, queryset):
+        queryset.update(status=Order.STATUS_SHIPPED)
+
+    @admin.action(description="Mark selected as DELIVERED")
+    def mark_delivered(self, request, queryset):
+        # COD orders are collected on delivery — auto-mark paid+verified.
+        # Online payments must ONLY be marked paid via gateway webhook.
+        for order in queryset:
+            order.status = Order.STATUS_DELIVERED
+            if order.payment_method == Order.PAYMENT_COD:
+                order.payment_status = Order.PAYMENT_PAID
+                order.payment_verified = True
+            order.save()
+
+    @admin.action(description="Mark selected as CANCELLED")
+    def mark_cancelled(self, request, queryset):
+        queryset.update(status=Order.STATUS_CANCELLED)
 
 
 @admin.register(OrderItem)

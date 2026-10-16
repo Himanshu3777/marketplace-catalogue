@@ -1,5 +1,6 @@
 """API-first ViewSets. JSON only — no HTML rendering for CRUD."""
 from django.db.models import Count, Min, Prefetch
+from django.http import Http404
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -84,19 +85,22 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def get_object(self):
         # Detail view: deep prefetch for variants/images/specs/reviews
-        obj = (
-            Product.objects.filter(is_active=True)
-            .select_related("brand", "category", "subcategory", "seller")
-            .prefetch_related(
-                "images", "specifications",
-                Prefetch("variants",
-                         queryset=ProductVariant.objects.prefetch_related(
-                             "images", "inventory", "prices")),
+        try:
+            obj = (
+                Product.objects.filter(is_active=True)
+                .select_related("brand", "category", "subcategory", "seller")
+                .prefetch_related(
+                    "images", "specifications",
+                    Prefetch("variants",
+                             queryset=ProductVariant.objects.prefetch_related(
+                                 "images", "inventory", "prices")),
+                )
+                .annotate(min_variant_price=Min("variants__price"),
+                          variant_count=Count("variants", distinct=True))
+                .get(slug=self.kwargs["slug"])
             )
-            .annotate(min_variant_price=Min("variants__price"),
-                      variant_count=Count("variants", distinct=True))
-            .get(slug=self.kwargs["slug"])
-        )
+        except Product.DoesNotExist:
+            raise Http404("Product not found")
         self.check_object_permissions(self.request, obj)
         return obj
 
