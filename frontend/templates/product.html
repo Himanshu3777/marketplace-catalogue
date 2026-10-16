@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Product — MarketPlace{% endblock %}
+{% block content %}
+<div id="detail"><div class="loading">Loading product…</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const slug = location.pathname.split("/").filter(Boolean).pop();
+let product = null, selVariant = null;
+
+function renderVariantSelectors() {
+  const axes = ["color", "size", "storage"];
+  let h = "";
+  axes.forEach(ax => {
+    const vals = [...new Set(product.variants.map(v => v[ax]).filter(Boolean))];
+    if (!vals.length) return;
+    h += `<h4 style="margin:10px 0 4px;text-transform:capitalize">${ax}</h4><div class="variant-pills">`;
+    vals.forEach(val => {
+      const active = product.variants.some(v => v[ax] === val && v.variant_id === selVariant.variant_id);
+      h += `<button data-ax="${ax}" data-val="${esc(val)}" class="${active ? "sel" : ""}">${esc(val)}</button>`;
+    });
+    h += `</div>`;
+  });
+  $("#variant-box").innerHTML = h;
+  $$("#variant-box button").forEach(b => b.addEventListener("click", () => selectVariant(b.dataset.ax, b.dataset.val)));
+}
+
+function selectVariant(ax, val) {
+  // keep other axes, switch this one
+  const cur = { color: selVariant.color, size: selVariant.size, storage: selVariant.storage, [ax]: val };
+  const match = product.variants.find(v =>
+    (v.color || null) === (cur.color || null) &&
+    (v.size || null) === (cur.size || null) &&
+    (v.storage || null) === (cur.storage || null));
+  if (match) { selVariant = match; renderAll(); }
+}
+
+function renderAll() {
+  const v = selVariant;
+  const img = (v.images[0]?.url) || (product.images[0]?.url) || "https://picsum.photos/seed/na/600/600";
+  $("#detail").innerHTML = `
+  <div class="detail">
+    <div class="gallery">
+      <img class="main" id="main-img" src="${img}" alt="${esc(product.name)}">
+      <div class="thumbs">${(v.images.length ? v.images : product.images).map((im, i) =>
+        `<img src="${im.url}" class="${i === 0 ? "sel" : ""}" data-src="${im.url}">`).join("")}</div>
+    </div>
+    <div>
+      <div style="color:#64748b;font-size:13px">${esc(product.brand_name)} · ${esc(product.product_type)}</div>
+      <h1 style="margin:6px 0">${esc(product.name)}</h1>
+      <div>${stars(product.rating)} <b>${product.rating}</b> · ${product.review_count} ratings</div>
+      <div style="margin:12px 0"><span class="price" style="font-size:26px">${inr(v.final_price)}</span>
+        ${v.discount_pct > 0 ? `<span class="mrp">${inr(v.price)}</span><span class="off">${v.discount_pct}% off</span>` : ""}</div>
+      <div style="font-size:13px;color:#64748b">Inclusive of ${product.gst_pct}% GST · Sold by ${esc(product.seller_name)}</div>
+      <div id="variant-box"></div>
+      <div style="margin:12px 0;font-size:14px">
+        ${v.inventory.available > 0
+          ? `<span style="color:#15803d;font-weight:700">✓ In stock (${v.inventory.available} available)</span>`
+          : `<span style="color:#b91c1c;font-weight:700">Out of stock</span>`}
+        <span style="color:#64748b"> · SKU ${esc(v.sku)}</span>
+      </div>
+      <div style="display:flex;gap:10px;margin:14px 0">
+        <button class="btn primary">Add to cart</button>
+        <button class="btn dark">Buy now</button>
+      </div>
+      <div style="font-size:13px;color:#64748b">🛡️ ${esc(product.warranty || "No warranty")} · ↩️ ${esc(product.return_policy || "")}</div>
+    </div>
+  </div>
+  <div class="detail" style="margin-top:20px;grid-template-columns:1fr">
+    <div>
+      <h2>About this product</h2>
+      <p style="margin-top:8px;color:#334155">${esc(product.detailed_description)}</p>
+      <h2 style="margin-top:16px">Specifications</h2>
+      <table class="spec-table">${product.specifications.map(s =>
+        `<tr><td>${esc(s.name)}</td><td>${esc(s.value)}</td></tr>`).join("")}</table>
+    </div>
+  </div>
+  <div id="reviews"></div>`;
+  renderVariantSelectors();
+  $$(".thumbs img").forEach(t => t.addEventListener("click", () => {
+    $("#main-img").src = t.dataset.src;
+    $$(".thumbs img").forEach(x => x.classList.remove("sel")); t.classList.add("sel");
+  }));
+  loadReviews();
+}
+
+async function loadReviews() {
+  const d = await api(`/products/${slug}/reviews/?page_size=5`);
+  $("#reviews").innerHTML = `<div class="detail" style="margin-top:20px;grid-template-columns:1fr">
+    <div><h2>Ratings & reviews</h2>
+    ${d.results.map(r => `<div class="review"><b>${stars(r.rating)}</b> <b>${esc(r.title)}</b>
+      <div style="color:#64748b;font-size:13px">by ${esc(r.author_name)} ${r.is_verified ? "✓ Verified" : ""}</div>
+      <p style="margin-top:4px">${esc(r.body)}</p></div>`).join("") || "<p>No reviews yet.</p>"}
+    </div></div>`;
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  product = await api(`/products/${slug}/`);
+  document.title = product.name + " — MarketPlace";
+  selVariant = product.variants[0] || { final_price: product.final_price, price: product.price, discount_pct: product.discount_pct, images: [], inventory: { available: 0 }, sku: product.sku };
+  renderAll();
+});
+</script>
+{% endblock %}

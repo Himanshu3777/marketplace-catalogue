@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Search — MarketPlace{% endblock %}
+{% block content %}
+<h1>Search results</h1>
+<p style="color:#64748b;margin-bottom:16px" id="q-line"></p>
+<div class="grid" id="grid"><div class="loading">Searching…</div></div>
+<div id="pager"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const q = new URLSearchParams(location.search).get("q") || "";
+let page = 1; const pageSize = 24;
+
+async function load() {
+  $("#q-line").textContent = `Results for "${q}"`;
+  document.title = `Search: ${q} — MarketPlace`;
+  const d = await api(`/products/?search=${encodeURIComponent(q)}&page=${page}&page_size=${pageSize}`);
+  $("#grid").innerHTML = d.results.map(productCard).join("") || `<div class="loading">No matches found.</div>`;
+  $("#pager").innerHTML = pager(d.count, page, pageSize);
+  bindPager($("#pager"), (p) => { page = p; load(); window.scrollTo(0, 0); });
+}
+document.addEventListener("DOMContentLoaded", () => { $("#search-input").value = q; load(); });
+</script>
+{% endblock %}

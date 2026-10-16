@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Category — MarketPlace{% endblock %}
+{% block content %}
+<div id="cat-head"><div class="loading">Loading…</div></div>
+<h2 style="margin:18px 0 10px">Subcategories</h2>
+<div class="cat-grid" id="subcats"></div>
+<h2 style="margin:18px 0 10px">Products</h2>
+<div class="toolbar"><span id="page-info"></span>
+  <select id="sort">
+    <option value="-created_at">Newest</option>
+    <option value="price">Price: low → high</option>
+    <option value="-price">Price: high → low</option>
+    <option value="-rating">Top rated</option>
+  </select>
+</div>
+<div class="grid" id="grid"></div>
+<div id="pager"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const slug = location.pathname.split("/").filter(Boolean).pop();
+let page = 1; const pageSize = 24;
+
+async function load() {
+  const cat = await api(`/categories/${slug}/`);
+  document.title = cat.name + " — MarketPlace";
+  $("#cat-head").innerHTML = `<h1>${esc(cat.name)}</h1><p style="color:#64748b">${esc(cat.description)}</p>`;
+  const subs = await api(`/subcategories/?category=${slug}&page_size=50`);
+  $("#subcats").innerHTML = subs.results.map(s =>
+    `<a class="cat-card" href="/?" onclick="event.preventDefault();filterSub('${s.slug}')">
+       <div style="font-weight:700">${esc(s.name)}</div>
+       <div style="color:#64748b;font-size:13px">${s.product_count} products</div></a>`).join("");
+  await loadProducts();
+}
+
+let subFilter = "";
+async function loadProducts() {
+  const q = new URLSearchParams({ page, page_size: pageSize, ordering: $("#sort").value, category: slug });
+  if (subFilter) q.set("subcategory", subFilter);
+  const d = await api("/products/?" + q);
+  $("#grid").innerHTML = d.results.map(productCard).join("") || `<div class="loading">No products.</div>`;
+  $("#page-info").textContent = `${d.count} products${subFilter ? " in " + subFilter : ""} · Page ${page}`;
+  $("#pager").innerHTML = pager(d.count, page, pageSize);
+  bindPager($("#pager"), (p) => { page = p; loadProducts(); window.scrollTo(0, 0); });
+}
+function filterSub(s) { subFilter = s; page = 1; loadProducts(); }
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("#sort").addEventListener("change", () => { page = 1; loadProducts(); });
+  load();
+});
+</script>
+{% endblock %}

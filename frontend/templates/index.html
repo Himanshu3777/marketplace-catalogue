@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Shop all products — MarketPlace{% endblock %}
+{% block content %}
+<h1 style="margin-bottom:6px">All products</h1>
+<p style="color:#64748b;margin-bottom:16px" id="result-count"></p>
+<div class="layout">
+  <aside class="filters">
+    <h3>Category</h3><select id="f-category"><option value="">All</option></select>
+    <h3>Brand</h3><select id="f-brand"><option value="">All</option></select>
+    <h3>Price</h3>
+    <input type="number" id="f-min" placeholder="Min ₹" min="0">
+    <input type="number" id="f-max" placeholder="Max ₹" min="0">
+    <h3>Rating</h3>
+    <select id="f-rating"><option value="">Any</option><option value="4">4★ & above</option><option value="3">3★ & above</option></select>
+    <h3>Availability</h3>
+    <label><input type="checkbox" id="f-stock"> In stock only</label>
+    <h3>Discount</h3>
+    <select id="f-discount"><option value="">Any</option><option value="10">10%+ off</option><option value="25">25%+ off</option><option value="50">50%+ off</option></select>
+    <button class="btn primary" id="f-apply" style="width:100%;margin-top:12px">Apply filters</button>
+  </aside>
+  <div>
+    <div class="toolbar">
+      <span id="page-info"></span>
+      <select id="sort">
+        <option value="-created_at">Newest</option>
+        <option value="price">Price: low → high</option>
+        <option value="-price">Price: high → low</option>
+        <option value="-rating">Top rated</option>
+        <option value="-discount_pct">Biggest discount</option>
+      </select>
+    </div>
+    <div class="grid" id="grid"><div class="loading">Loading…</div></div>
+    <div id="pager"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let page = 1;
+const pageSize = 24;
+
+async function loadFilters() {
+  const [cats, brands] = await Promise.all([api("/categories/?page_size=50"), api("/brands/?page_size=100")]);
+  cats.results.forEach(c => $("#f-category").insertAdjacentHTML("beforeend", `<option value="${c.slug}">${esc(c.name)}</option>`));
+  brands.results.forEach(b => $("#f-brand").insertAdjacentHTML("beforeend", `<option value="${b.slug}">${esc(b.name)}</option>`));
+}
+
+function query() {
+  const q = new URLSearchParams({ page, page_size: pageSize, ordering: $("#sort").value });
+  const v = (id) => $(id).value.trim();
+  if (v("#f-category")) q.set("category", v("#f-category"));
+  if (v("#f-brand")) q.set("brand", v("#f-brand"));
+  if (v("#f-min")) q.set("min_price", v("#f-min"));
+  if (v("#f-max")) q.set("max_price", v("#f-max"));
+  if (v("#f-rating")) q.set("min_rating", v("#f-rating"));
+  if (v("#f-discount")) q.set("min_discount", v("#f-discount"));
+  if ($("#f-stock").checked) q.set("in_stock", "true");
+  return q.toString();
+}
+
+async function load() {
+  $("#grid").innerHTML = `<div class="loading">Loading…</div>`;
+  const d = await api("/products/?" + query());
+  $("#grid").innerHTML = d.results.map(productCard).join("") || `<div class="loading">No products found.</div>`;
+  $("#result-count").textContent = `${d.count.toLocaleString("en-IN")} products`;
+  $("#page-info").textContent = `Page ${page}`;
+  $("#pager").innerHTML = pager(d.count, page, pageSize);
+  bindPager($("#pager"), (p) => { page = p; load(); window.scrollTo(0, 0); });
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadFilters();
+  $("#f-apply").addEventListener("click", () => { page = 1; load(); });
+  $("#sort").addEventListener("change", () => { page = 1; load(); });
+  load();
+});
+</script>
+{% endblock %}
