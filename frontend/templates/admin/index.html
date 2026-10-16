@@ -1,0 +1,44 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+{% if dashboard %}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+    <div style="font-size:12px;color:#64748b">Total orders</div>
+    <div style="font-size:24px;font-weight:bold">{{ dashboard.total_orders }}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+    <div style="font-size:12px;color:#64748b">Revenue (paid)</div>
+    <div style="font-size:24px;font-weight:bold;color:#059669">₹{{ dashboard.revenue }}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+    <div style="font-size:12px;color:#64748b">Pending orders</div>
+    <div style="font-size:24px;font-weight:bold;color:#d97706">{{ dashboard.pending_orders }}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+    <div style="font-size:12px;color:#64748b">Return requests</div>
+    <div style="font-size:24px;font-weight:bold;color:#7c3aed">{{ dashboard.pending_returns }}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+    <div style="font-size:12px;color:#64748b">Low stock</div>
+    <div style="font-size:24px;font-weight:bold;color:#d97706">{{ dashboard.low_stock_count }}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px">
+    <div style="font-size:12px;color:#64748b">Out of stock</div>
+    <div style="font-size:24px;font-weight:bold;color:#dc2626">{{ dashboard.out_of_stock_count }}</div>
+  </div>
+</div>
+{% if dashboard.recent_orders %}
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px">
+  <h3 style="margin:0 0 10px">Recent orders</h3>
+  <table style="width:100%;font-size:13px">
+    <tr style="color:#64748b;text-align:left"><th>Order</th><th>Customer</th><th>Status</th><th>Total</th></tr>
+    {% for o in dashboard.recent_orders %}
+    <tr><td><b>{{ o.order_number }}</b></td><td>{{ o.customer_name }}</td><td>{{ o.status }}</td><td>₹{{ o.total }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endif %}
+{{ block.super }}
+{% endblock %}
