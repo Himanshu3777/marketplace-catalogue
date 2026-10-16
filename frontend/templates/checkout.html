@@ -72,20 +72,41 @@ async function placeOrder() {
     address_line1: v("#f-addr1"), address_line2: v("#f-addr2"),
     city: v("#f-city"), state: v("#f-state"), pincode: v("#f-pin"),
     notes: v("#f-notes"), payment_method: payMethod,
+    // Idempotency: one UUID per page load. Refresh/double-click sends the
+    // SAME key, so the backend returns the original order instead of
+    // creating a duplicate.
+    idempotency_key: window.__idemKey,
   };
   const btn = $("#btn-place");
+  // Double-submit guard: button stays disabled until we get a response.
+  if (btn.disabled) return;
   btn.disabled = true; btn.textContent = "Placing order…";
   try {
     const order = await apiPost("/orders/checkout/", body);
+    // New key for any future order from this page (e.g. user goes back).
+    window.__idemKey = crypto.randomUUID();
     location.href = "/order/" + order.order_number + "/";
   } catch (e) {
-    $("#co-err").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    // 409 = prices changed mid-checkout: show what changed, refresh cart.
+    if (e.status === 409 && e.data && e.data.price_changed) {
+      const rows = (e.data.changes || []).map(c =>
+        `<li>${esc(c.product_name)}: ₹${c.old_price} → <b>₹${c.new_price}</b></li>`
+      ).join("");
+      $("#co-err").innerHTML = `<div class="alert warn">
+        <b>Prices updated</b> while you were checking out:
+        <ul>${rows}</ul>Cart refreshed with the new prices — please review and place your order again.</div>`;
+      try { renderCheckout(await api("/cart/")); } catch (_) {}
+    } else {
+      $("#co-err").innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    }
     btn.disabled = false; btn.textContent = "Place order";
     window.scrollTo(0, 0);
   }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Fresh idempotency key for this checkout page load.
+  window.__idemKey = crypto.randomUUID();
   try { renderCheckout(await api("/cart/")); }
   catch (e) { $("#co-wrap").innerHTML = `<div class="alert err">Could not load cart.</div>`; }
 });

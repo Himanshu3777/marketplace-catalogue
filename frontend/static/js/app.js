@@ -16,7 +16,12 @@ async function apiPost(path, body) {
     body: JSON.stringify(body || {}),
   });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || `API ${r.status}`);
+  if (!r.ok) {
+    const err = new Error(d.error || `API ${r.status}`);
+    err.status = r.status;  // e.g. 409 for price-change conflicts
+    err.data = d;           // full response body (changes[], cart, …)
+    throw err;
+  }
   return d;
 }
 
