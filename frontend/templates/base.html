@@ -14,12 +14,13 @@
     <button type="submit">Search</button>
   </form>
   <nav>
-    <a href="/">Home</a>
+    <a href="/">🏠 Home</a>
     <a href="/cart/" class="cart-link">🛒 Cart <span id="cart-count" class="cart-badge">0</span></a>
-    <span id="auth-nav"><a href="/login/">Login</a></span>
-    <a href="/api/products/" target="_blank">API</a>
+    <a href="/my-orders/" id="nav-orders" style="display:none">📦 Orders</a>
+    <span id="auth-nav"><a href="/login/">👤 Login</a></span>
   </nav>
 </header>
+{% block breadcrumb %}{% endblock %}
 <main>{% block content %}{% endblock %}</main>
 <script src="/static/js/app.js"></script>
 {% block scripts %}{% endblock %}

@@ -128,13 +128,15 @@ document.addEventListener("DOMContentLoaded", () => {
 let __currentUser = null;
 async function refreshAuthNav() {
   const el = $("#auth-nav");
+  const ordersLink = $("#nav-orders");
   if (!el) return;
   try {
     const d = await api("/accounts/me/");
     __currentUser = d.user;
     if (d.user) {
-      el.innerHTML = `<a href="/my-orders/">Hi, ${esc(d.user.name.split(" ")[0])}</a>
+      el.innerHTML = `<a href="/my-orders/">👤 Hi, ${esc(d.user.name.split(" ")[0])}</a>
         <a href="#" id="logout-link">Logout</a>`;
+      if (ordersLink) ordersLink.style.display = "";
       $("#logout-link").addEventListener("click", async (e) => {
         e.preventDefault();
         await apiPost("/accounts/logout/", {});

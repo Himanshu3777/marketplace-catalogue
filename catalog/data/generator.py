@@ -165,7 +165,11 @@ class CatalogueGenerator:
                 ],
             })
 
-        images = [f"https://picsum.photos/seed/{_slug(name)[:40]}-{i}/600/600" for i in range(3)]
+        # Expensive products (₹5000+) get 5 images for multi-angle view;
+        # others get 3.
+        n_images = 5 if price >= 5000 else 3
+        images = [f"https://picsum.photos/seed/{_slug(name)[:40]}-{i}/600/600"
+                  for i in range(n_images)]
         n_reviews = min(review_count, 5)
         reviews = []
         for _ in range(n_reviews):

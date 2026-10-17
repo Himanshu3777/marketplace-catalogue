@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Product — MarketPlace{% endblock %}
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="/">🏠 Home</a> <span>›</span>
+  <a href="javascript:history.back()">← Back</a> <span>›</span>
+  <span id="crumb-name">Product</span>
+</div>
+{% endblock %}
 {% block content %}
 <div id="detail"><div class="loading">Loading product…</div></div>
 {% endblock %}
@@ -166,6 +173,8 @@ async function loadReviews() {
 document.addEventListener("DOMContentLoaded", async () => {
   product = await api(`/products/${slug}/`);
   document.title = product.name + " — MarketPlace";
+  const crumb = $("#crumb-name");
+  if (crumb) crumb.textContent = product.name;
   selVariant = product.variants[0] || { final_price: product.final_price, price: product.price, discount_pct: product.discount_pct, images: [], inventory: { available: 0 }, sku: product.sku };
   renderAll();
 });

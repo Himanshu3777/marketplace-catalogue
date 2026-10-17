@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Checkout — MarketPlace{% endblock %}
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="/">🏠 Home</a> <span>›</span>
+  <a href="/cart/">🛒 Cart</a> <span>›</span>
+  <a href="javascript:history.back()">← Back</a> <span>›</span>
+  <span>Checkout</span>
+</div>
+{% endblock %}
 {% block content %}
 <h1 style="margin-bottom:16px">Checkout</h1>
 <div id="co-wrap"><div class="loading">Loading…</div></div>
