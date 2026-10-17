@@ -75,7 +75,8 @@ function renderAll() {
         `<tr><td>${esc(s.name)}</td><td>${esc(s.value)}</td></tr>`).join("")}</table>
     </div>
   </div>
-  <div id="reviews"></div>`;
+  <div id="reviews"></div>
+  <div id="related"></div>`;
   renderVariantSelectors();
   const addBtn = $("#btn-add-cart");
   if (addBtn && !addBtn.disabled) addBtn.addEventListener("click", async () => {
@@ -94,16 +95,72 @@ function renderAll() {
     $$(".thumbs img").forEach(x => x.classList.remove("sel")); t.classList.add("sel");
   }));
   loadReviews();
+  loadRelated();
+}
+
+async function loadRelated() {
+  try {
+    const items = await api(`/products/${slug}/related/`);
+    if (!items.length) return;
+    $("#related").innerHTML = `<div class="detail" style="margin-top:20px;grid-template-columns:1fr">
+      <div><h2>You may also like</h2>
+      <div class="grid" style="margin-top:12px">${items.map(p => `
+        <a href="/product/${p.slug}/" class="card">
+          <img loading="lazy" src="${(p.images[0]?.url) || "https://picsum.photos/seed/na/400/400"}" alt="${esc(p.name)}">
+          <div style="padding:10px">
+            <div style="font-size:13px;color:#64748b">${esc(p.brand_name)}</div>
+            <div style="font-weight:600;font-size:14px;margin:2px 0">${esc(p.name)}</div>
+            <div>${stars(p.rating)} <span style="font-size:12px;color:#64748b">(${p.review_count})</span></div>
+            <div style="margin-top:4px"><span class="price">${inr(p.final_price)}</span>
+            ${p.discount_pct > 0 ? `<span class="mrp">${inr(p.price)}</span>` : ""}</div>
+          </div>
+        </a>`).join("")}</div>
+      </div></div>`;
+  } catch (e) { /* related is optional */ }
 }
 
 async function loadReviews() {
   const d = await api(`/products/${slug}/reviews/?page_size=5`);
+  const loggedIn = await api("/accounts/me/").then(m => !!m.user).catch(() => false);
   $("#reviews").innerHTML = `<div class="detail" style="margin-top:20px;grid-template-columns:1fr">
     <div><h2>Ratings & reviews</h2>
     ${d.results.map(r => `<div class="review"><b>${stars(r.rating)}</b> <b>${esc(r.title)}</b>
       <div style="color:#64748b;font-size:13px">by ${esc(r.author_name)} ${r.is_verified ? "✓ Verified" : ""}</div>
-      <p style="margin-top:4px">${esc(r.body)}</p></div>`).join("") || "<p>No reviews yet.</p>"}
+      <p style="margin-top:4px">${esc(r.body)}</p></div>`).join("") || "<p>No reviews yet. Be the first!</p>"}
+    ${loggedIn ? `
+    <h3 style="margin-top:16px">Write a review</h3>
+    <div style="display:flex;gap:6px;margin:8px 0" id="rev-stars">
+      ${[1,2,3,4,5].map(i => `<button data-r="${i}" style="font-size:24px;background:none;border:none;cursor:pointer">☆</button>`).join("")}
+    </div>
+    <input id="rev-title" placeholder="Review headline" style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <textarea id="rev-body" placeholder="What did you like or dislike?" rows="3" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px"></textarea>
+    <button class="btn primary" id="rev-submit" style="margin-top:8px">Submit review</button>
+    <div id="rev-msg" style="margin-top:6px;font-size:13px"></div>`
+    : `<p style="margin-top:12px"><a href="/login/?next=/product/${slug}/">Log in</a> to write a review.</p>`}
     </div></div>`;
+  // star picker + submit
+  let picked = 5;
+  $$("#rev-stars button").forEach(b => b.addEventListener("click", () => {
+    picked = +b.dataset.r;
+    $$("#rev-stars button").forEach(x => x.textContent = +x.dataset.r <= picked ? "★" : "☆");
+  }));
+  const sub = $("#rev-submit");
+  if (sub) sub.addEventListener("click", async () => {
+    const title = $("#rev-title").value.trim(), body = $("#rev-body").value.trim();
+    if (!title || !body) { $("#rev-msg").textContent = "Please add a headline and review."; return; }
+    sub.disabled = true;
+    try {
+      await api(`/products/${slug}/reviews/submit/`, "POST",
+        { rating: picked, title, body });
+      $("#rev-msg").style.color = "#15803d";
+      $("#rev-msg").textContent = "Thanks! Your review is submitted.";
+      loadReviews();
+    } catch (e) {
+      $("#rev-msg").style.color = "#b91c1c";
+      $("#rev-msg").textContent = e.message;
+      sub.disabled = false;
+    }
+  });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
