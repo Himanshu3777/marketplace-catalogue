@@ -15,8 +15,26 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.db import connection
+from django.http import JsonResponse
 from django.urls import include, path
 from django.views.generic import TemplateView
+
+
+def health_check(request):
+    """Lightweight liveness probe — no DB hit, no sensitive data."""
+    return JsonResponse({"status": "ok"})
+
+
+def readiness_check(request):
+    """Readiness probe — verifies DB connectivity. For Render/monitoring."""
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT 1")
+        return JsonResponse({"status": "ready", "db": "ok"})
+    except Exception:
+        return JsonResponse(
+            {"status": "not_ready", "db": "error"}, status=503)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -37,4 +55,6 @@ urlpatterns = [
     path('product/<slug:slug>/', TemplateView.as_view(template_name='product.html'), name='product-detail'),
     path('category/<slug:slug>/', TemplateView.as_view(template_name='category.html'), name='category'),
     path('search/', TemplateView.as_view(template_name='search.html'), name='search'),
+    path('health/', health_check, name='health'),
+    path('ready/', readiness_check, name='ready'),
 ]

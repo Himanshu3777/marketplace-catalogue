@@ -1,10 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Product — MarketPlace{% endblock %}
 {% block breadcrumb %}
-<div class="breadcrumb">
-  <a href="/">🏠 Home</a> <span>›</span>
-  <a href="javascript:history.back()">← Back</a> <span>›</span>
-  <span id="crumb-name">Product</span>
+<div class="breadcrumb" id="product-crumb">
+  <a href="/">🏠 Home</a>
 </div>
 {% endblock %}
 {% block content %}
@@ -173,8 +171,19 @@ async function loadReviews() {
 document.addEventListener("DOMContentLoaded", async () => {
   product = await api(`/products/${slug}/`);
   document.title = product.name + " — MarketPlace";
-  const crumb = $("#crumb-name");
-  if (crumb) crumb.textContent = product.name;
+  // Proper breadcrumb: Home / Category / Subcategory / Product
+  const crumb = $("#product-crumb");
+  if (crumb) {
+    let html = `<a href="/">🏠 Home</a>`;
+    if (product.category) {
+      html += ` <span>›</span> <a href="/category/${esc(product.category.slug)}/">${esc(product.category.name)}</a>`;
+    }
+    if (product.subcategory && product.category) {
+      html += ` <span>›</span> <a href="/category/${esc(product.category.slug)}/">${esc(product.subcategory.name)}</a>`;
+    }
+    html += ` <span>›</span> <span>${esc(product.name)}</span>`;
+    crumb.innerHTML = html;
+  }
   selVariant = product.variants[0] || { final_price: product.final_price, price: product.price, discount_pct: product.discount_pct, images: [], inventory: { available: 0 }, sku: product.sku };
   renderAll();
 });
