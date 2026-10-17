@@ -112,6 +112,19 @@ RENDER_HOST = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_HOST:
     ALLOWED_HOSTS.append(RENDER_HOST)
 
+# ---- Security headers (active in production when DEBUG=False) ----
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+if not DEBUG:
+    # HTTPS-only cookies + HSTS (Render serves HTTPS)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
