@@ -252,3 +252,29 @@ CACHES = {
 # → Project Settings → Service Accounts → Generate New Private Key.
 # Paste the JSON content into Render env var FIREBASE_CREDENTIALS_JSON.
 FIREBASE_CREDENTIALS_JSON = os.environ.get("FIREBASE_CREDENTIALS_JSON", "")
+
+# Sentry error monitoring (https://sentry.io).
+# Create a free account, add a Django project, copy the DSN,
+# and set it as Render env var SENTRY_DSN. Empty = disabled.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    def _sentry_scrub(event, hint):
+        """Remove sensitive data before sending to Sentry."""
+        # Never send passwords, OTPs, tokens, or payment secrets
+        for key in ("password", "otp", "token", "secret", "card",
+                    "cvv", "private_key", "id_token"):
+            if key in event.get("request", {}).get("data", {}):
+                event["request"]["data"][key] = "[REDACTED]"
+        return event
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=0.1,  # 10% of requests traced (free tier friendly)
+        send_default_pii=False,  # Never send user personal data
+        before_send=_sentry_scrub,
+        environment="production" if not DEBUG else "development",
+    )
