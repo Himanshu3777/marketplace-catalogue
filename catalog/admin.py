@@ -14,6 +14,11 @@ class CategoryAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     prepopulated_fields = {"slug": ["name"]}
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from django.core.cache import cache
+        cache.delete("category_tree")  # invalidate cached category list
+
 
 @admin.register(SubCategory)
 class SubCategoryAdmin(admin.ModelAdmin):

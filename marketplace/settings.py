@@ -238,3 +238,11 @@ else:
     }
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", "MarketPlace <noreply@marketplace.local>")
+
+# Cache: local memory (free tier has no Redis). Categories/brands cached 1h.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "marketplace-cache",
+    }
+}

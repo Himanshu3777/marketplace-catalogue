@@ -1,4 +1,5 @@
 """API-first ViewSets. JSON only — no HTML rendering for CRUD."""
+from django.core.cache import cache
 from django.db.models import Count, Min, Prefetch
 from django.http import Http404
 from rest_framework import viewsets
@@ -33,11 +34,19 @@ def product_list_queryset():
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = CategorySerializer
+    lookup_field = "slug"
     queryset = Category.objects.filter(is_active=True).annotate(
         subcategory_count=Count("subcategories")
     )
-    serializer_class = CategorySerializer
-    lookup_field = "slug"
+
+    def list(self, request, *args, **kwargs):
+        # Categories change rarely — cache the serialized tree for 1 hour.
+        data = cache.get("category_tree")
+        if data is None:
+            data = self.serializer_class(self.get_queryset(), many=True).data
+            cache.set("category_tree", data, 3600)
+        return Response(data)
 
 
 class SubCategoryViewSet(viewsets.ReadOnlyModelViewSet):
