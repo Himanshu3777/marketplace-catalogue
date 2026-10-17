@@ -27,16 +27,25 @@ class OrderAdmin(admin.ModelAdmin):
 
     @admin.action(description="Mark selected as CONFIRMED")
     def mark_confirmed(self, request, queryset):
-        queryset.update(status=Order.STATUS_CONFIRMED)
+        from marketplace.notifications import order_status_update
+        for order in queryset:
+            order.status = Order.STATUS_CONFIRMED
+            order.save()
+            order_status_update(order)
 
     @admin.action(description="Mark selected as SHIPPED")
     def mark_shipped(self, request, queryset):
-        queryset.update(status=Order.STATUS_SHIPPED)
+        from marketplace.notifications import order_status_update
+        for order in queryset:
+            order.status = Order.STATUS_SHIPPED
+            order.save()
+            order_status_update(order)
 
     @admin.action(description="Mark selected as DELIVERED")
     def mark_delivered(self, request, queryset):
         # COD orders are collected on delivery — auto-mark paid+verified.
         # Online payments must ONLY be marked paid via gateway webhook.
+        from marketplace.notifications import order_status_update
         for order in queryset.prefetch_related("items"):
             order.status = Order.STATUS_DELIVERED
             if order.payment_method == Order.PAYMENT_COD:
@@ -44,14 +53,17 @@ class OrderAdmin(admin.ModelAdmin):
                 order.payment_verified = True
             order.save()
             order.deduct_stock_on_delivery()
+            order_status_update(order)
 
     @admin.action(description="Mark selected as CANCELLED")
     def mark_cancelled(self, request, queryset):
+        from marketplace.notifications import order_status_update
         for order in queryset.prefetch_related("items"):
             if order.status != Order.STATUS_CANCELLED:
                 order.status = Order.STATUS_CANCELLED
                 order.save()
                 order.release_reserved_stock()
+                order_status_update(order)
 
 
 @admin.register(OrderItem)

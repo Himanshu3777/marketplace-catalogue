@@ -1,0 +1,8 @@
+<h2>Return {{ rr.get_status_display }}</h2>
+<p>Hi {{ order.customer_name }},</p>
+<p>Your {{ rr.get_request_type_display|lower }} request for <b>{{ rr.order_item.product_name }}</b>
+(order {{ order.order_number }}) is now: <b>{{ rr.get_status_display }}</b>.</p>
+{% if rr.refund_status != "NOT_STARTED" %}
+<p><b>Refund:</b> {{ rr.get_refund_status_display }}{% if rr.refund_amount %} — ₹{{ rr.refund_amount }}{% endif %}</p>
+{% endif %}
+<p><a href="https://marketplace-catalogue.onrender.com/order/{{ order.order_number }}/">View order →</a></p>

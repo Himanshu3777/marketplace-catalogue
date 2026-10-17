@@ -15,13 +15,19 @@ class ReturnRequestAdmin(admin.ModelAdmin):
 
     @admin.action(description="Approve selected requests")
     def approve_requests(self, request, queryset):
-        queryset.filter(status=ReturnRequest.STATUS_REQUESTED).update(
-            status=ReturnRequest.STATUS_APPROVED)
+        from marketplace.notifications import return_status_update
+        for rr in queryset.filter(status=ReturnRequest.STATUS_REQUESTED):
+            rr.status = ReturnRequest.STATUS_APPROVED
+            rr.save()
+            return_status_update(rr)
 
     @admin.action(description="Reject selected requests")
     def reject_requests(self, request, queryset):
-        queryset.filter(status=ReturnRequest.STATUS_REQUESTED).update(
-            status=ReturnRequest.STATUS_REJECTED)
+        from marketplace.notifications import return_status_update
+        for rr in queryset.filter(status=ReturnRequest.STATUS_REQUESTED):
+            rr.status = ReturnRequest.STATUS_REJECTED
+            rr.save()
+            return_status_update(rr)
 
     @admin.action(description="Mark as REFUNDED")
     def mark_refunded(self, request, queryset):

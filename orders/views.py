@@ -174,6 +174,13 @@ def checkout(request):
                 inv.save(update_fields=["reserved"])
         cart.items.all().delete()
 
+    # Confirmation email (best-effort: never breaks checkout)
+    try:
+        from marketplace.notifications import order_confirmation
+        order_confirmation(order)
+    except Exception:
+        pass
+
     return Response(OrderSerializer(order).data,
                     status=status.HTTP_201_CREATED)
 

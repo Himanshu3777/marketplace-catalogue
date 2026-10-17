@@ -1,0 +1,14 @@
+<h2>Order {{ order.order_number }} confirmed! 🎉</h2>
+<p>Hi {{ order.customer_name }},</p>
+<p>Thanks for shopping with MarketPlace! Your order is confirmed and being prepared.</p>
+<h3>Items</h3>
+<ul>{{ items_html|safe }}</ul>
+<p><b>Subtotal:</b> ₹{{ order.subtotal }}<br>
+<b>Delivery:</b> {% if order.delivery_fee %}₹{{ order.delivery_fee }}{% else %}FREE{% endif %}<br>
+<b>Total:</b> ₹{{ order.total }}</p>
+<p><b>Payment:</b> {{ order.get_payment_method_display }} ({{ order.get_payment_status_display }})</p>
+<h3>Deliver to</h3>
+<p>{{ order.address_line1 }}{% if order.address_line2 %}, {{ order.address_line2 }}{% endif %}<br>
+{{ order.city }}, {{ order.state }} — {{ order.pincode }}</p>
+<p><a href="https://marketplace-catalogue.onrender.com/order/{{ order.order_number }}/">Track your order →</a></p>
+<p style="color:#64748b;font-size:12px">No hidden charges — what you see is what you pay.</p>

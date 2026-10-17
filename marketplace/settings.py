@@ -206,3 +206,22 @@ LOGGING = {
                      "propagate": False},
     },
 }
+# Email (Gmail SMTP, Django 6.1 MAILERS format). Without credentials,
+# falls back to console backend so checkout never breaks on email failure.
+if os.environ.get("EMAIL_HOST_PASSWORD"):
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+            "HOST": "smtp.gmail.com",
+            "PORT": 587,
+            "USE_TLS": True,
+            "USERNAME": os.environ.get("EMAIL_HOST_USER", ""),
+            "PASSWORD": os.environ.get("EMAIL_HOST_PASSWORD", ""),
+        }
+    }
+else:
+    MAILERS = {
+        "default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}
+    }
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", "MarketPlace <noreply@marketplace.local>")
