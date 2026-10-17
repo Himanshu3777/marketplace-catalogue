@@ -143,13 +143,21 @@ class Order(models.Model):
 
         Phase 1 rule: successful payment → stock decreases immediately.
         Idempotent: if already deducted (reserved < quantity), skips.
+        Uses SELECT FOR UPDATE to prevent concurrent double-deduction.
         """
         from django.db import transaction
+        from inventory.models import Inventory
         with transaction.atomic():
+            variant_ids = list(self.items.exclude(variant_id=None)
+                               .values_list("variant_id", flat=True))
+            # Lock inventory rows for the duration of this transaction
+            locked = {inv.variant_id: inv for inv in
+                      Inventory.objects.select_for_update()
+                      .filter(variant_id__in=variant_ids)}
             for item in self.items.select_related("variant").all():
                 if not item.variant_id:
                     continue
-                inv = getattr(item.variant, "inventory", None)
+                inv = locked.get(item.variant_id)
                 if inv:
                     take = min(item.quantity, inv.reserved)
                     inv.reserved -= take
@@ -160,11 +168,17 @@ class Order(models.Model):
     def restock_on_cancel_after_payment(self):
         """Return sold units to stock (paid order cancelled)."""
         from django.db import transaction
+        from inventory.models import Inventory
         with transaction.atomic():
+            variant_ids = list(self.items.exclude(variant_id=None)
+                               .values_list("variant_id", flat=True))
+            locked = {inv.variant_id: inv for inv in
+                      Inventory.objects.select_for_update()
+                      .filter(variant_id__in=variant_ids)}
             for item in self.items.select_related("variant").all():
                 if not item.variant_id:
                     continue
-                inv = getattr(item.variant, "inventory", None)
+                inv = locked.get(item.variant_id)
                 if inv:
                     inv.quantity += item.quantity
                     inv.save(update_fields=["quantity"])
