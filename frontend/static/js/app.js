@@ -3,10 +3,19 @@ const API = "/api";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
-async function api(path) {
-  const r = await fetch(API + path);
-  if (!r.ok) throw new Error(`API ${r.status}`);
-  return r.json();
+async function api(path, timeoutMs = 30000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(API + path, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(`API ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("Request timed out. Please refresh.");
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 async function apiPost(path, body) {
