@@ -7,10 +7,91 @@
   <label>Email</label><input id="l-email" type="email" placeholder="you@example.com" autocomplete="email">
   <label>Password</label><input id="l-pass" type="password" placeholder="Your password" autocomplete="current-password">
   <button class="btn primary" id="btn-login" style="width:100%;margin-top:12px">Login</button>
+
+  <div style="display:flex;align-items:center;gap:10px;margin:18px 0 6px;color:#64748b;font-size:13px">
+    <div style="flex:1;height:1px;background:#e2e8f0"></div>OR<div style="flex:1;height:1px;background:#e2e8f0"></div>
+  </div>
+
+  <div id="otp-box">
+    <label>📱 Phone number</label>
+    <input id="otp-phone" type="tel" placeholder="+91 98765 43210" autocomplete="tel">
+    <div id="recaptcha-box" style="margin:8px 0"></div>
+    <button class="btn" id="btn-send-otp" style="width:100%;margin-top:8px">Send OTP</button>
+    <div id="otp-verify-box" style="display:none;margin-top:12px">
+      <label>Enter OTP</label>
+      <input id="otp-code" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit OTP">
+      <button class="btn primary" id="btn-verify-otp" style="width:100%;margin-top:8px">Verify & Login</button>
+    </div>
+  </div>
+
   <p style="margin-top:12px;font-size:14px">No account? <a href="/register/">Create one</a></p>
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCtt5jj8ew_XAqa4hGNEwasMBqD8EA7B7E",
+  authDomain: "shoping-69c86.firebaseapp.com",
+  projectId: "shoping-69c86",
+  storageBucket: "shoping-69c86.firebasestorage.app",
+  messagingSenderId: "496415548937",
+  appId: "1:496415548937:web:d2df1c3dd7dc0d31573ad8",
+};
+firebase.initializeApp(firebaseConfig);
+const fbAuth = firebase.auth();
+let confirmationResult = null;
+
+fbAuth.languageCode = "en";
+window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier(
+  "recaptcha-box", { size: "normal" });
+
+$("#btn-send-otp").addEventListener("click", async () => {
+  const phone = $("#otp-phone").value.trim();
+  const errBox = $("#login-err");
+  errBox.innerHTML = "";
+  if (!/^\+\d{10,15}$/.test(phone)) {
+    errBox.innerHTML = `<div class="alert err">Phone number +91 ke saath likho, jaise +919876543210</div>`;
+    return;
+  }
+  const btn = $("#btn-send-otp");
+  btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    confirmationResult = await fbAuth.signInWithPhoneNumber(
+      phone, window.recaptchaVerifier);
+    $("#otp-verify-box").style.display = "block";
+    errBox.innerHTML = `<div class="alert ok">OTP bhej diya gaya! ✅</div>`;
+    btn.textContent = "Resend OTP";
+  } catch (e) {
+    errBox.innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
+    try { window.recaptchaVerifier.render(); } catch (_) {}
+  } finally { btn.disabled = false; }
+});
+
+$("#btn-verify-otp").addEventListener("click", async () => {
+  const code = $("#otp-code").value.trim();
+  const errBox = $("#login-err");
+  errBox.innerHTML = "";
+  if (!confirmationResult) {
+    errBox.innerHTML = `<div class="alert err">Pehle OTP bhejo.</div>`;
+    return;
+  }
+  const btn = $("#btn-verify-otp");
+  btn.disabled = true; btn.textContent = "Verifying…";
+  try {
+    const cred = await confirmationResult.confirm(code);
+    const idToken = await cred.user.getIdToken();
+    const d = await apiPost("/accounts/phone-login/", { id_token: idToken });
+    await refreshAuthNav();
+    await refreshCartCount();
+    location.href = "/";
+  } catch (e) {
+    errBox.innerHTML = `<div class="alert err">${esc(e.message || "Galat OTP. Dobara try karo.")}</div>`;
+    btn.disabled = false; btn.textContent = "Verify & Login";
+  }
+});
+</script>
 <script>
 async function doLogin() {
   const btn = $("#btn-login");
