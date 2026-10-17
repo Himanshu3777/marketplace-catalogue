@@ -112,6 +112,8 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 RENDER_HOST = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_HOST:
     ALLOWED_HOSTS.append(RENDER_HOST)
+    # Trust Render's HTTPS origin for CSRF (admin login POSTs)
+    CSRF_TRUSTED_ORIGINS = [f"https://{RENDER_HOST}"]
 
 # ---- Security headers (active in production when DEBUG=False) ----
 SECURE_BROWSER_XSS_FILTER = True
