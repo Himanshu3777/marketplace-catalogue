@@ -150,10 +150,13 @@ class Order(models.Model):
         with transaction.atomic():
             variant_ids = list(self.items.exclude(variant_id=None)
                                .values_list("variant_id", flat=True))
-            # Lock inventory rows for the duration of this transaction
+            # Lock inventory rows for the duration of this transaction.
+            # order_by ensures consistent lock acquisition order across
+            # concurrent transactions, preventing deadlocks.
             locked = {inv.variant_id: inv for inv in
                       Inventory.objects.select_for_update()
-                      .filter(variant_id__in=variant_ids)}
+                      .filter(variant_id__in=variant_ids)
+                      .order_by("variant_id")}
             for item in self.items.select_related("variant").all():
                 if not item.variant_id:
                     continue
@@ -172,9 +175,12 @@ class Order(models.Model):
         with transaction.atomic():
             variant_ids = list(self.items.exclude(variant_id=None)
                                .values_list("variant_id", flat=True))
+            # order_by ensures consistent lock acquisition order across
+            # concurrent transactions, preventing deadlocks.
             locked = {inv.variant_id: inv for inv in
                       Inventory.objects.select_for_update()
-                      .filter(variant_id__in=variant_ids)}
+                      .filter(variant_id__in=variant_ids)
+                      .order_by("variant_id")}
             for item in self.items.select_related("variant").all():
                 if not item.variant_id:
                     continue
