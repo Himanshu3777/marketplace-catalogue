@@ -246,3 +246,8 @@ CACHES = {
         "LOCATION": "marketplace-cache",
     }
 }
+
+# Firebase Phone Auth (OTP login). Get credentials from Firebase Console
+# → Project Settings → Service Accounts → Generate New Private Key.
+# Paste the JSON content into Render env var FIREBASE_CREDENTIALS_JSON.
+FIREBASE_CREDENTIALS_JSON = os.environ.get("FIREBASE_CREDENTIALS_JSON", "")

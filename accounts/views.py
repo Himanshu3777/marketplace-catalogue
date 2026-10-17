@@ -1,3 +1,7 @@
+import logging
+
+from django.conf import settings
+
 """Customer authentication API — Django session auth (no tokens to leak).
 
 Security notes:
@@ -6,6 +10,8 @@ Security notes:
 - The frontend must never invent auth state — /api/accounts/me/ is the
   single source of truth.
 """
+
+logger = logging.getLogger(__name__)
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
@@ -228,3 +234,66 @@ def save_default_address(request):
         profile.phone = phone_digits
     profile.save()
     return Response({"user": user_payload(request.user)})
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthNoCSRF])
+@permission_classes([])
+@throttle_classes([AuthThrottle])
+def phone_login(request):
+    """Login/register via Firebase phone OTP.
+
+    Frontend sends the Firebase ID token after OTP verification.
+    We verify the token server-side, then find or create the user
+    by phone number. No password needed.
+    """
+    from django.contrib.auth import login as auth_login
+
+    id_token = str(request.data.get("id_token", "")).strip()
+    if not id_token:
+        return Response({"error": "id_token is required."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Verify with Firebase Admin SDK
+    try:
+        import firebase_admin
+        from firebase_admin import auth as fb_auth, credentials
+        if not firebase_admin._apps:
+            import json as _json
+            cred_json = getattr(settings, "FIREBASE_CREDENTIALS_JSON", "")
+            if not cred_json:
+                return Response(
+                    {"error": "Phone login not configured."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            cred = credentials.Certificate(_json.loads(cred_json))
+            firebase_admin.initialize_app(cred)
+        decoded = fb_auth.verify_id_token(id_token)
+        phone = decoded.get("phone_number", "")
+    except Exception as e:
+        logger.warning("Firebase token verification failed: %s", e)
+        return Response({"error": "Invalid or expired OTP session."},
+                        status=status.HTTP_401_UNAUTHORIZED)
+
+    if not phone:
+        return Response({"error": "No phone number in token."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    phone_digits = "".join(c for c in phone if c.isdigit())
+    # Find existing user by phone, or create one
+    profile = CustomerProfile.objects.filter(phone=phone_digits).first()
+    if profile:
+        user = profile.user
+    else:
+        username = f"phone_{phone_digits}"
+        user, created = User.objects.get_or_create(
+            username=username,
+            defaults={"first_name": "Customer"},
+        )
+        profile, _ = CustomerProfile.objects.get_or_create(user=user)
+        profile.phone = phone_digits
+        profile.save(update_fields=["phone"])
+
+    # Merge guest cart (same as password login)
+    merge_session_cart_into_user(request, user)
+    auth_login(request, user)
+    return Response({"user": user_payload(user)})
