@@ -3,7 +3,7 @@ services:
     name: marketplace-catalogue
     env: python
     buildCommand: "./build.sh"
-    startCommand: "gunicorn marketplace.wsgi:application"
+    startCommand: "gunicorn -c gunicorn.conf.py marketplace.wsgi:application"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
