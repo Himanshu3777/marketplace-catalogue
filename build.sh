@@ -13,3 +13,9 @@ if [ "$PRODUCT_COUNT" = "0" ]; then
 else
   echo "Catalogue already has $PRODUCT_COUNT products, skipping seed."
 fi
+# Create admin superuser from env vars (free plan has no Shell access).
+# Set DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL,
+# DJANGO_SUPERUSER_PASSWORD in Render Environment.
+if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
+  python manage.py createsuperuser --noinput 2>/dev/null || echo "Superuser already exists or creation skipped."
+fi
