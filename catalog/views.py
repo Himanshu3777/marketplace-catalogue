@@ -2,6 +2,8 @@
 from django.core.cache import cache
 from django.db.models import Count, Min, Prefetch
 from django.http import Http404
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -86,6 +88,12 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ["price", "rating", "created_at", "discount_pct", "review_count"]
     ordering = ["-created_at"]
     lookup_field = "slug"
+
+    @method_decorator(cache_page(60))
+    def list(self, request, *args, **kwargs):
+        # Public catalogue data is identical for all users — safe to cache 60s.
+        # Dramatically reduces DB load under traffic spikes.
+        return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
         return product_list_queryset()
