@@ -7,6 +7,14 @@
   <label>Email</label><input id="l-email" type="email" placeholder="you@example.com" autocomplete="email">
   <label>Password</label><input id="l-pass" type="password" placeholder="Your password" autocomplete="current-password">
   <button class="btn primary" id="btn-login" style="width:100%;margin-top:12px">Login</button>
+  <p style="margin-top:8px;font-size:14px;text-align:right"><a href="#" id="forgot-link">Forgot password?</a></p>
+
+  <div id="forgot-box" style="display:none;margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px">
+    <label>Email</label>
+    <input id="fp-email" type="email" placeholder="you@example.com">
+    <button class="btn" id="btn-forgot" style="width:100%;margin-top:8px">Send Reset Link</button>
+    <div id="fp-msg" style="margin-top:8px;font-size:13px"></div>
+  </div>
 
   <div style="display:flex;align-items:center;gap:10px;margin:18px 0 6px;color:#64748b;font-size:13px">
     <div style="flex:1;height:1px;background:#e2e8f0"></div>OR<div style="flex:1;height:1px;background:#e2e8f0"></div>
@@ -28,7 +36,26 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">
+// Forgot password toggle
+$("#forgot-link").addEventListener("click", (e) => {
+  e.preventDefault();
+  const box = $("#forgot-box");
+  box.style.display = box.style.display === "none" ? "block" : "none";
+});
+$("#btn-forgot").addEventListener("click", async () => {
+  const email = $("#fp-email").value.trim();
+  const msg = $("#fp-msg");
+  const btn = $("#btn-forgot");
+  btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    const d = await apiPost("/accounts/forgot-password/", { email });
+    msg.innerHTML = `<span style="color:#15803d">${esc(d.message)}</span>`;
+  } catch (e) {
+    msg.innerHTML = `<span style="color:#b91c1c">${esc(e.message)}</span>`;
+  } finally { btn.disabled = false; btn.textContent = "Send Reset Link"; }
+});
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 const firebaseConfig = {

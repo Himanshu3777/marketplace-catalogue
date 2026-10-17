@@ -55,6 +55,9 @@ urlpatterns = [
     path('product/<slug:slug>/', TemplateView.as_view(template_name='product.html'), name='product-detail'),
     path('category/<slug:slug>/', TemplateView.as_view(template_name='category.html'), name='category'),
     path('search/', TemplateView.as_view(template_name='search.html'), name='search'),
+    path('reset-password/<str:uid>/<str:token>/',
+         TemplateView.as_view(template_name='reset_password.html'),
+         name='reset-password'),
     path('health/', health_check, name='health'),
     path('ready/', readiness_check, name='ready'),
 ]

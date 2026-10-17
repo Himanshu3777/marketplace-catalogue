@@ -297,3 +297,85 @@ def phone_login(request):
     merge_session_cart_into_user(request, user)
     auth_login(request, user)
     return Response({"user": user_payload(user)})
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthNoCSRF])
+@permission_classes([])
+@throttle_classes([AuthThrottle])
+def forgot_password(request):
+    """Send a password reset link via email (no SMS needed).
+
+    Always returns success to avoid leaking which emails are registered.
+    """
+    from django.contrib.auth.tokens import default_token_generator
+    from django.core.mail import send_mail
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
+
+    email = str(request.data.get("email", "")).strip().lower()
+    if email:
+        try:
+            validate_email(email)
+            user = User.objects.filter(email=email).first()
+            if user:
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                # Build reset link using the request's host
+                scheme = "https" if request.is_secure() else "http"
+                host = request.get_host()
+                reset_url = f"{scheme}://{host}/reset-password/{uid}/{token}/"
+                try:
+                    send_mail(
+                        "Reset your MarketPlace password",
+                        f"Hi {user.first_name or user.username},\n\n"
+                        f"Click the link below to reset your password:\n"
+                        f"{reset_url}\n\n"
+                        f"This link expires in 24 hours.\n"
+                        f"If you didn't request this, ignore this email.",
+                        settings.DEFAULT_FROM_EMAIL,
+                        [email],
+                        fail_silently=True,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Password reset email failed: %s", e)
+        except ValidationError:
+            pass
+    # Always return success (don't reveal if email exists)
+    return Response({"message": "If this email is registered, a reset link has been sent."})
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthNoCSRF])
+@permission_classes([])
+@throttle_classes([AuthThrottle])
+def reset_password_confirm(request):
+    """Set a new password using the emailed token."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.encoding import force_str
+    from django.utils.http import urlsafe_base64_decode
+
+    uidb64 = str(request.data.get("uid", ""))
+    token = str(request.data.get("token", ""))
+    new_password = str(request.data.get("new_password", ""))
+
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (User.DoesNotExist, ValueError, TypeError):
+        return Response({"error": "Invalid reset link."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if not default_token_generator.check_token(user, token):
+        return Response({"error": "Invalid or expired reset link."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_password(new_password, user)
+    except ValidationError as e:
+        return Response({"error": "; ".join(e.messages)},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    return Response({"message": "Password reset successful. Please login."})
