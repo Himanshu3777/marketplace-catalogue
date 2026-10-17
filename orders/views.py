@@ -200,7 +200,9 @@ def order_detail(request, order_number):
 def order_cancel(request, order_number):
     """Customer cancels their own order (PLACED/CONFIRMED only).
 
-    Releases the reserved stock back to the available pool.
+    Stock handling (Phase 1):
+    - Unpaid order: release the reservation.
+    - Paid order: restock the deducted units (they were sold).
     """
     order = get_order_for_request(request, order_number)
     if order.status == Order.STATUS_CANCELLED:
@@ -211,7 +213,11 @@ def order_cancel(request, order_number):
             {"error": f"Cannot cancel — order is already {order.status.lower()}"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    was_paid = order.payment_verified and order.payment_status == Order.PAYMENT_PAID
     order.status = Order.STATUS_CANCELLED
     order.save(update_fields=["status"])
-    order.release_reserved_stock()
+    if was_paid:
+        order.restock_on_cancel_after_payment()
+    else:
+        order.release_reserved_stock()
     return Response(OrderSerializer(order).data)

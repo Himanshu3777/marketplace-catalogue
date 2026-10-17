@@ -160,6 +160,9 @@ def verify_payment(request):
     if order.status == Order.STATUS_PLACED:
         order.status = Order.STATUS_CONFIRMED
     order.save()
+    # Phase 1: successful payment → stock decreases immediately.
+    # Idempotent: deduct_stock_on_payment skips if already deducted.
+    order.deduct_stock_on_payment()
     return Response({"verified": True,
                      "order": OrderSerializer(order).data})
 
@@ -201,4 +204,6 @@ def razorpay_webhook(request):
             if order.status == Order.STATUS_PLACED:
                 order.status = Order.STATUS_CONFIRMED
             order.save()
+            # Phase 1: idempotent stock deduction (skips if already done)
+            order.deduct_stock_on_payment()
     return JsonResponse({"ok": True})

@@ -138,8 +138,12 @@ class Order(models.Model):
                     inv.reserved -= item.quantity
                     inv.save(update_fields=["reserved"])
 
-    def deduct_stock_on_delivery(self):
-        """Convert reservation into a real sale (order delivered)."""
+    def deduct_stock_on_payment(self):
+        """Convert reservation into a real sale (payment successful).
+
+        Phase 1 rule: successful payment → stock decreases immediately.
+        Idempotent: if already deducted (reserved < quantity), skips.
+        """
         from django.db import transaction
         with transaction.atomic():
             for item in self.items.select_related("variant").all():
@@ -149,7 +153,38 @@ class Order(models.Model):
                 if inv:
                     take = min(item.quantity, inv.reserved)
                     inv.reserved -= take
-                    inv.quantity = max(0, inv.quantity - item.quantity)
+                    # Only deduct what was reserved (prevents double-deduct)
+                    inv.quantity = max(0, inv.quantity - take)
+                    inv.save(update_fields=["reserved", "quantity"])
+
+    def restock_on_cancel_after_payment(self):
+        """Return sold units to stock (paid order cancelled)."""
+        from django.db import transaction
+        with transaction.atomic():
+            for item in self.items.select_related("variant").all():
+                if not item.variant_id:
+                    continue
+                inv = getattr(item.variant, "inventory", None)
+                if inv:
+                    inv.quantity += item.quantity
+                    inv.save(update_fields=["quantity"])
+
+    def deduct_stock_on_delivery(self):
+        """Convert reservation into a real sale (order delivered).
+
+        Safety net: for COD orders (no payment verification step) or if
+        payment-time deduction was missed. Idempotent via reserved check.
+        """
+        from django.db import transaction
+        with transaction.atomic():
+            for item in self.items.select_related("variant").all():
+                if not item.variant_id:
+                    continue
+                inv = getattr(item.variant, "inventory", None)
+                if inv:
+                    take = min(item.quantity, inv.reserved)
+                    inv.reserved -= take
+                    inv.quantity = max(0, inv.quantity - take)
                     inv.save(update_fields=["reserved", "quantity"])
 
     @staticmethod

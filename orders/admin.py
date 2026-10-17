@@ -60,9 +60,14 @@ class OrderAdmin(admin.ModelAdmin):
         from marketplace.notifications import order_status_update
         for order in queryset.prefetch_related("items"):
             if order.status != Order.STATUS_CANCELLED:
+                was_paid = (order.payment_verified and
+                            order.payment_status == Order.PAYMENT_PAID)
                 order.status = Order.STATUS_CANCELLED
                 order.save()
-                order.release_reserved_stock()
+                if was_paid:
+                    order.restock_on_cancel_after_payment()
+                else:
+                    order.release_reserved_stock()
                 order_status_update(order)
 
 
